@@ -183,6 +183,7 @@ const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
 const fileRef=useRef(null);
 const $=dark?TH.dark:TH.light;
 useEffect(()=>{document.body.style.background=$.bg;document.body.style.color=$.t;},[$.bg,$.t]);
+useEffect(()=>{const handler=e=>{if(e.data&&e.data.type==="fbgm-advisor-data"&&e.data.payload){try{load(JSON.stringify(e.data.payload));if(e.source)e.source.postMessage("fbgm-advisor-ack","*");}catch(err){setErr("postMessage load failed: "+err.message);}}};window.addEventListener("message",handler);return()=>window.removeEventListener("message",handler);},[]);
 
 const load=t=>{try{setErr(null);setData(pD(t));setTSel(false);setMyTid(null);}catch(e){setErr(e.message);}};
 const hFile=f=>{if(!f)return;const r=new FileReader();r.onload=e=>load(e.target.result);r.readAsText(f);};
