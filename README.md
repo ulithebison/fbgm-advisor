@@ -4,6 +4,8 @@ Standalone roster analysis tool for [Football GM](https://play.football-gm.com/)
 
 Every calculation (OVR, aging curves, team OVR weights, draft AI) matches the actual game engine. No guessing.
 
+If there are any questions, please DM me here or in this Discord thread: [ZenGM Discord](https://discord.com/channels/290013534023057409/1514707917490622614)
+
 ## Features
 
 - **Roster & Grades** — Sortable depth chart by position, grades vs. league average, starter/backup hierarchy
