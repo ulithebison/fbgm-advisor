@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FBGM Quick Export — Bookmarklet Setup</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#080c14;color:#eee;font-family:'Segoe UI',sans-serif;padding:40px 20px;max-width:700px;margin:0 auto;line-height:1.7}
+h1{font-size:24px;font-weight:800;margin-bottom:8px;background:linear-gradient(135deg,#e63946,#f4a261,#2a9d8f);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-size:16px;color:#f4a261;margin:28px 0 10px}
+p{color:rgba(255,255,255,0.6);margin-bottom:12px;font-size:14px}
+.step{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:16px;margin:12px 0}
+.step-num{display:inline-block;background:#e63946;color:#fff;width:24px;height:24px;border-radius:50%;text-align:center;line-height:24px;font-weight:700;font-size:12px;margin-right:8px}
+.bookmark-link{display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#e63946,#c0392b);color:#fff;border-radius:8px;font-weight:700;font-size:15px;text-decoration:none;cursor:grab;margin:8px 0;transition:transform 0.2s}
+.bookmark-link:hover{transform:scale(1.05)}
+code{background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#f4a261}
+.note{background:rgba(46,204,113,0.08);border:1px solid rgba(46,204,113,0.2);border-radius:8px;padding:12px;margin:16px 0;font-size:13px;color:rgba(255,255,255,0.5)}
+.warn{background:rgba(231,76,60,0.08);border:1px solid rgba(231,76,60,0.2);border-radius:8px;padding:12px;margin:16px 0;font-size:13px;color:rgba(255,255,255,0.5)}
+</style>
+</head>
+<body>
+
+<h1>⚡ FBGM Quick Export</h1>
+<p>Ein-Klick Export deiner FBGM Liga-Daten — erspart den manuellen Export über Tools → Export League.</p>
+
+<h2>Setup (einmalig)</h2>
+
+<div class="step">
+<span class="step-num">1</span>
+<strong>Ziehe diesen Button in deine Lesezeichen-Leiste:</strong><br><br>
+<a class="bookmark-link" href="javascript:void((async()=>{try{const m=location.pathname.match(/\/l\/(\d+)/);if(!m){alert('Open a FBGM league first! (URL should contain /l/NUMBER/)');return;}const lid=m[1];const dbName='league'+lid;const open=indexedDB.open(dbName);open.onerror=()=>alert('Cannot open DB: '+dbName);open.onsuccess=async()=>{const db=open.result;const tx=db.transaction(['players','teams','teamSeasons','gameAttributes','draftPicks'],'readonly');const read=s=>new Promise((res,rej)=>{const r=tx.objectStore(s).getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});const[players,teams,teamSeasons,gaArr,draftPicks]=await Promise.all([read('players'),read('teams'),read('teamSeasons'),read('gameAttributes'),read('draftPicks')]);const ga={};gaArr.forEach(a=>{ga[a.key]=a.value;});teams.forEach(t=>{t.seasons=teamSeasons.filter(s=>s.tid===t.tid).sort((a,b)=>a.season-b.season);});const data={players,teams,gameAttributes:ga,draftPicks};const json=JSON.stringify(data);const blob=new Blob([json],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='FBGM_L'+lid+'_'+ga.season+'_quick.json';a.click();URL.revokeObjectURL(url);const mb=(json.length/1024/1024).toFixed(1);alert('Export done! '+mb+'MB — '+players.length+' players, '+teams.length+' teams, '+draftPicks.length+' picks');};}catch(e){alert('Error: '+e.message);}})())">⚡ FBGM Quick Export</a>
+<br><br>
+<span style="font-size:12px;color:rgba(255,255,255,0.35)">Tipp: Falls die Lesezeichen-Leiste nicht sichtbar ist: <code>Ctrl+Shift+B</code> (Chrome/Edge) oder <code>Ctrl+B</code> (Firefox)</span>
+</div>
+
+<div class="step">
+<span class="step-num">2</span>
+<strong>Fertig!</strong> Das Bookmarklet ist installiert.
+</div>
+
+<h2>Benutzung</h2>
+
+<div class="step">
+<span class="step-num">1</span>
+Öffne deine Liga in Football GM (<code>play.zengm.com/l/9/...</code>)
+</div>
+
+<div class="step">
+<span class="step-num">2</span>
+Klicke auf <strong>⚡ FBGM Quick Export</strong> in deiner Lesezeichen-Leiste
+</div>
+
+<div class="step">
+<span class="step-num">3</span>
+Die JSON wird automatisch heruntergeladen — lade sie im FBGM Advisor hoch
+</div>
+
+<div class="note">
+✅ <strong>Was exportiert wird:</strong> Players, Teams (mit Seasons/Standings), GameAttributes, Draft Picks — alles was der Advisor braucht. Kein manuelles Checkbox-Klicken mehr.
+</div>
+
+<div class="warn">
+⚠️ <strong>Wichtig:</strong> Das Bookmarklet funktioniert nur auf der FBGM-Seite (<code>play.zengm.com</code> oder <code>play.football-gm.com</code>). Es liest nur Daten — es verändert nichts an deiner Liga.
+</div>
+
+<p style="margin-top:32px;font-size:11px;color:rgba(255,255,255,0.2);text-align:center">
+FBGM Quick Export · Built for FBGM Advisor · Reads from IndexedDB league database
+</p>
+
+</body>
+</html>
