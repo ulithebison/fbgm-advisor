@@ -905,12 +905,13 @@ return <div key={pos} style={{marginBottom:10}}>
 <span style={{...M,fontWeight:700,fontSize:13,color:PC[pos]}}>{pos}</span>
 <span style={{fontSize:10,color:$.t5}}>{group.length} players</span>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 22px 32px 32px 36px 48px 48px",gap:4,padding:"0 4px",marginBottom:3,fontSize:10,color:$.t4}}>
-<VH label="Name" sk="name"/><VH label="#" sk="rank" align="center"/><VH label="OVR" sk="ovr" align="center"/><VH label="Next" sk="nextOvr" align="center"/><VH label="VOR" sk="vorVal" align="center"/><VH label="Salary" sk="salary" align="right"/><VH label="$/VOR" sk="perVor" align="right"/></div>
-{sorted.map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 22px 32px 32px 36px 48px 48px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 22px 32px 28px 32px 36px 48px 48px",gap:4,padding:"0 4px",marginBottom:3,fontSize:10,color:$.t4}}>
+<VH label="Name" sk="name"/><VH label="#" sk="rank" align="center"/><VH label="OVR" sk="ovr" align="center"/><VH label="Pot" sk="pot" align="center"/><VH label="Next" sk="nextOvr" align="center"/><VH label="VOR" sk="vorVal" align="center"/><VH label="Salary" sk="salary" align="right"/><VH label="$/VOR" sk="perVor" align="right"/></div>
+{sorted.map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 22px 32px 28px 32px 36px 48px 48px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:p.rank<=((TPW[pos]||[1]).length)?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{p.rank}/{p.depthCount}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
 <span style={{...M,color:$.t4,textAlign:"center"}}>{p.nextOvr||"—"}</span>
 <span style={{...M,fontWeight:700,textAlign:"center",color:p.vorVal>=20?"#2ecc71":p.vorVal>=10?"#f1c40f":p.vorVal>=5?"#e67e22":"#e74c3c"}}>{p.vorVal>0?"+":""}{p.vorVal}</span>
 <span style={{...M,fontSize:9,color:$.t5,textAlign:"right"}}>{fS(p.salary)}</span>
