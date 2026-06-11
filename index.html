@@ -183,12 +183,12 @@ const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
 const fileRef=useRef(null);
 const $=dark?TH.dark:TH.light;
 useEffect(()=>{document.body.style.background=$.bg;document.body.style.color=$.t;},[$.bg,$.t]);
-const pmLoaded=useRef(false);
+const pmRef=useRef(null);
 useEffect(()=>{
-const handler=e=>{if(e.data&&typeof e.data==="object"&&e.data.type==="fbgm-advisor-data"&&!pmLoaded.current){try{const payload=typeof e.data.payload==="string"?e.data.payload:JSON.stringify(e.data.payload);load(payload);pmLoaded.current=true;if(e.source)e.source.postMessage("fbgm-advisor-ack","*");}catch(err){setErr("Load failed: "+err.message);}}};
-window.addEventListener("message",handler);
+pmRef.current=e=>{if(e.data&&typeof e.data==="object"&&e.data.type==="fbgm-advisor-data"){try{const payload=typeof e.data.payload==="string"?e.data.payload:JSON.stringify(e.data.payload);load(payload);if(e.source)e.source.postMessage("fbgm-advisor-ack","*");window.removeEventListener("message",pmRef.current);pmRef.current=null;}catch(err){setErr("Load failed: "+err.message);}}};
+window.addEventListener("message",pmRef.current);
 if(window.opener){try{window.opener.postMessage("fbgm-advisor-ready","*");}catch(e){}}
-return()=>window.removeEventListener("message",handler);
+return()=>{if(pmRef.current)window.removeEventListener("message",pmRef.current);};
 },[]);
 
 const load=t=>{try{setErr(null);setData(pD(t));setTSel(false);setMyTid(null);}catch(e){setErr(e.message);}};
@@ -533,7 +533,7 @@ const disp=dSort(dFilt(raw));
 return(<div style={{padding:"16px 12px",maxWidth:740,margin:"0 auto"}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
 <div><h1 style={{...H,fontSize:18,margin:0,letterSpacing:1,background:"linear-gradient(135deg,#e63946,#f4a261)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><span style={{fontSize:11,color:$.t4,...M}}>Season {data.season} · {myTm?.name||`Team #${myTid}`}</span></div>
-<div style={{display:"flex",gap:5}}><ThemeBtn/><button onClick={()=>setTSel(false)} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>Switch Team</button><button onClick={()=>{setData(null);setTSel(false);pmLoaded.current=false;}} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>New File</button></div></div>
+<div style={{display:"flex",gap:5}}><ThemeBtn/><button onClick={()=>setTSel(false)} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>Switch Team</button><button onClick={()=>{setData(null);setTSel(false);}} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>New File</button></div></div>
 
 <div style={{display:"flex",gap:0,marginBottom:10,background:$.tab,borderRadius:8,overflow:"hidden",border:`1px solid ${$.tabb}`}}>
 {TABS.map(tb=><button key={tb.id} onClick={()=>cTab(tb.id)} style={{flex:1,padding:"9px 2px",border:"none",cursor:"pointer",fontSize:12,fontWeight:tab===tb.id?700:500,fontFamily:"'DM Sans',sans-serif",background:tab===tb.id?$.acc:"transparent",color:tab===tb.id?"#e63946":$.tabi,borderBottom:tab===tb.id?"2px solid #e63946":"2px solid transparent"}}>{tb.label}{tb.id==="depth"&&expP.length>0&&<span style={{fontSize:9,marginLeft:2,color:"#e74c3c"}}>⚠{expP.length}</span>}</button>)}</div>
