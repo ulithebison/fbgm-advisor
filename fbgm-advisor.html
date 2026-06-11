@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FBGM Advisor</title>
+<link href="https://fonts.googleapis.com/css2?family=Anybody:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s}
+button{font-family:inherit}
+.tip{position:relative;display:inline-block;margin-left:5px;cursor:help}
+.tip .tip-pop{visibility:hidden;opacity:0;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5;width:260px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;transition:opacity 0.15s}
+.tip:hover .tip-pop{visibility:visible;opacity:1}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useCallback,useRef,useEffect}=React;
+
+// ─── THEME ──────────────────────────────────────────
+const TH={
+dark:{bg:"#080c14",card:"rgba(255,255,255,0.025)",cb:"rgba(255,255,255,0.06)",row:"rgba(255,255,255,0.03)",
+t:"#eee",t0:"#fff",t9:"rgba(255,255,255,0.7)",t8:"rgba(255,255,255,0.6)",t7:"rgba(255,255,255,0.5)",
+t6:"rgba(255,255,255,0.4)",t5:"rgba(255,255,255,0.35)",t4:"rgba(255,255,255,0.3)",t3:"rgba(255,255,255,0.25)",
+t2:"rgba(255,255,255,0.2)",t1:"rgba(255,255,255,0.15)",t0b:"rgba(255,255,255,0.1)",
+inp:"rgba(0,0,0,0.4)",inpb:"rgba(255,255,255,0.1)",inpt:"#aaa",
+btn:"rgba(255,255,255,0.06)",btnb:"rgba(255,255,255,0.1)",btnt:"rgba(255,255,255,0.5)",
+fil:"rgba(255,255,255,0.04)",filt:"rgba(255,255,255,0.35)",
+tab:"rgba(255,255,255,0.03)",tabb:"rgba(255,255,255,0.06)",tabi:"rgba(255,255,255,0.4)",
+need:"rgba(46,204,113,0.06)",exp:"rgba(231,76,60,0.07)",
+gbad:"rgba(231,76,60,0.07)",ggood:"rgba(46,204,113,0.05)",
+dp:"rgba(46,204,113,0.12)",dn:"rgba(231,76,60,0.12)",
+acc:"rgba(230,57,70,0.15)",acc2:"rgba(230,57,70,0.2)",
+comp:"rgba(255,255,255,0.03)",compb:"rgba(255,255,255,0.06)",bar:"rgba(255,255,255,0.06)"},
+light:{bg:"#f0f2f5",card:"#ffffff",cb:"rgba(0,0,0,0.08)",row:"rgba(0,0,0,0.03)",
+t:"#1a1a2e",t0:"#111",t9:"rgba(0,0,0,0.7)",t8:"rgba(0,0,0,0.6)",t7:"rgba(0,0,0,0.5)",
+t6:"rgba(0,0,0,0.4)",t5:"rgba(0,0,0,0.35)",t4:"rgba(0,0,0,0.3)",t3:"rgba(0,0,0,0.25)",
+t2:"rgba(0,0,0,0.18)",t1:"rgba(0,0,0,0.12)",t0b:"rgba(0,0,0,0.08)",
+inp:"#fff",inpb:"rgba(0,0,0,0.15)",inpt:"#333",
+btn:"rgba(0,0,0,0.04)",btnb:"rgba(0,0,0,0.12)",btnt:"rgba(0,0,0,0.5)",
+fil:"rgba(0,0,0,0.05)",filt:"rgba(0,0,0,0.4)",
+tab:"rgba(0,0,0,0.03)",tabb:"rgba(0,0,0,0.06)",tabi:"rgba(0,0,0,0.4)",
+need:"rgba(46,204,113,0.08)",exp:"rgba(231,76,60,0.08)",
+gbad:"rgba(231,76,60,0.06)",ggood:"rgba(46,204,113,0.06)",
+dp:"rgba(46,204,113,0.15)",dn:"rgba(231,76,60,0.15)",
+acc:"rgba(230,57,70,0.1)",acc2:"rgba(230,57,70,0.15)",
+comp:"rgba(0,0,0,0.02)",compb:"rgba(0,0,0,0.06)",bar:"rgba(0,0,0,0.08)"}
+};
+
+// ─── GAME ENGINE ────────────────────────────────────
+const CW={passingAccuracy:{r:["tha","hgt"],w:[1,0.2]},passingDeep:{r:["thp","tha","hgt"],w:[1,0.1,0.2]},passingVision:{r:["thv","hgt"],w:[1,0.5]},athleticism:{r:["stre","spd","hgt"],w:[1,1,0.2]},rushing:{r:["stre","spd","elu"],w:[0.5,1,1]},catching:{r:["hgt","hnd"],w:[0.2,1]},gettingOpen:{r:["hgt","spd","rtr","hnd"],w:[1,0.25,2,1]},speed:{r:["spd"],w:[1]},passBlocking:{r:["hgt","stre","spd","pbk"],w:[0.5,1,0.2,1]},runBlocking:{r:["hgt","stre","spd","rbk"],w:[0.5,1,0.4,1]},passRushing:{r:["hgt","stre","spd","prs","tck"],w:[1,1,0.5,1,0.25]},runStopping:{r:["hgt","stre","spd","rns","tck"],w:[0.5,1,0.5,1,0.4]},passCoverage:{r:["hgt","spd","pcv"],w:[0.1,1,1]},tackling:{r:["spd","stre","tck"],w:[1,1,2.5]},avoidingSacks:{r:["thv","elu","stre"],w:[1,1,0.25]},ballSecurity:{r:["bsc","stre"],w:[1,0.2]},kickingPower:{r:["kpw"],w:[1]},kickingAccuracy:{r:["kac"],w:[1]},punting:{r:["ppw","pac"],w:[1,1]}};
+const PIF={QB:{passingAccuracy:[3,1],passingDeep:[3,1],passingVision:[3,1],athleticism:[1,1],rushing:[1,1],avoidingSacks:[1,1],ballSecurity:[1,1],constant0:[-1.25,1]},RB:{rushing:[10,1],catching:[2,1],gettingOpen:[1,1],passBlocking:[1,1],runBlocking:[1,1],ballSecurity:[1,1],constant0:[-1.25,1]},WR:{catching:[5,1],gettingOpen:[5,1],rushing:[1,1],ballSecurity:[1,1],constant0:[1.25,1]},TE:{catching:[2,1],gettingOpen:[2,1],passBlocking:[2,1],runBlocking:[2,1],constant0:[-0.525,1]},OL:{passBlocking:[3,1],runBlocking:[3,1],constant0:[0.75,1]},DL:{passRushing:[5,1],runStopping:[5,1],tackling:[1,1],constant0:[0.25,1]},LB:{passRushing:[2,1],runStopping:[2,1],passCoverage:[1,1],tackling:[4,1],constant0:[-0.75,1]},CB:{passCoverage:[4.2,1],constant0:[1,1]},S:{passCoverage:[2,1],tackling:[1,1],constant0:[0.1,1]},K:{kickingPower:[1,1],kickingAccuracy:[1,1]},P:{punting:[1,1]}};
+const PP=["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];
+const RK=["hgt","stre","spd","endu","thv","thp","tha","bsc","elu","rtr","hnd","pbk","rbk","pcv","tck","prs","rns","kpw","kac","ppw","pac"];
+const TPW={QB:[0.1253],RB:[0.0503],WR:[0.0388,0.0256,0.0226],TE:[0.0158],OL:[0.0961,0.0897,0.0863,0.0823,0.0609],DL:[0.1488,0.1026,0.0915,0.0333],LB:[0.0666,0.0475],CB:[0.0612,0.06],S:[0.0426,0.0371],K:[0.0344],P:[0.019]};
+const PSC={QB:3,RB:4,WR:6,TE:3,OL:9,DL:9,LB:7,CB:5,S:5,K:1,P:1};
+const PC={QB:"#e63946",RB:"#e76f51",WR:"#f4a261",TE:"#e9c46a",OL:"#2a9d8f",DL:"#3d6b7a",LB:"#457b9d",CB:"#6a4c93",S:"#8338ec",K:"#3a86a7",P:"#48a9a6"};
+const PL={QB:"Quarterback",RB:"Running Back",WR:"Wide Receiver",TE:"Tight End",OL:"Off. Line",DL:"Def. Line",LB:"Linebacker",CB:"Cornerback",S:"Safety",K:"Kicker",P:"Punter"};
+const GM={QB:"OFF",RB:"OFF",WR:"OFF",TE:"OFF",OL:"OFF",DL:"DEF",LB:"DEF",CB:"DEF",S:"DEF",K:"ST",P:"ST"};
+const RN={hgt:"Height",stre:"Strength",spd:"Speed",endu:"Endurance",thv:"Throw Vision",thp:"Throw Power",tha:"Throw Acc.",bsc:"Ball Security",elu:"Elusiveness",rtr:"Route Running",hnd:"Hands",pbk:"Pass Block",rbk:"Run Block",pcv:"Pass Coverage",tck:"Tackling",prs:"Pass Rush",rns:"Run Stopping",kpw:"Kick Power",kac:"Kick Acc.",ppw:"Punt Power",pac:"Punt Acc."};
+const bd=(x,a,b)=>Math.min(b,Math.max(a,x));
+const cR=(rt,c,w)=>{let n=0,d=0;for(let i=0;i<c.length;i++){n+=(typeof c[i]==="number"?c[i]:(rt[c[i]]||0))*w[i];d+=100*w[i];}return bd(n/d,0,1);};
+const cO=(rt,pos)=>{const cs={constant0:0};for(const[k,v]of Object.entries(CW))cs[k]=cR(rt,v.r,v.w);const info=PIF[pos];if(!info)return 0;let r=0,s=0;for(const[k,[c,p]]of Object.entries(info)){r+=c*(100/Math.pow(100,p))*Math.pow(cs[k]||0,p);s+=c;}r=(r/s)*100;let f=0;if(r>=68)f=15;else if(r>=62)f=5+(r-62)*(10/6);else if(r>=59)f=(r-59)*(5/3);else if(r>=52)f=-5+(r-52)*(5/7);else if(r>=40)f=-15+(r-40)*(10/12);else f=-15;r=bd(Math.round(r+f),0,100);if(pos==="K"||pos==="P")r=Math.round(r*0.75);return r;};
+const bP=rt=>{let b="QB",bo=0;PP.forEach(p=>{const o=cO(rt,p);if(o>bo){bo=o;b=p;}});return{pos:b,ovr:bo};};
+// Aging projection from developSeason.football.ts
+const IQ_RATINGS=new Set(["thv","elu","rtr","hnd","rbk","pbk","pcv","tck","prs","rns","kac","pac"]);
+const PWR_RATINGS=new Set(["thp","tha","kpw","ppw"]);
+const baseChg=age=>age<=21?2:age<=25?1:age<=27?0:age<=29?-1:age<=31?-2:age<=34?-3:-4;
+const ageMod=(key,age)=>{
+if(key==="hgt")return -(baseChg(age)); // height doesn't change
+if(key==="spd")return age<=27?0:age<=30?-2:-4;
+if(key==="endu")return age<=23?4:age<=30?0:-4;
+if(IQ_RATINGS.has(key))return age<=21?3:age<=23?2:age<=27?0:age<=29?0.5:age<=31?1.5:2;
+if(PWR_RATINGS.has(key))return age<=27?0:age<=29?0.5:age<=31?1.5:2;
+return 0; // stre, bsc just use base
+};
+const projectRatings=(rt,age,seasons)=>{
+const proj=[];let cur={};RK.forEach(k=>cur[k]=rt[k]||0);
+for(let s=0;s<seasons;s++){
+const a=age+s;const next={};
+RK.forEach(k=>{const chg=baseChg(a)+ageMod(k,a);next[k]=bd(Math.round(cur[k]+chg),0,100);});
+next.pos=rt.pos;cur=next;
+const bp=bP(cur);proj.push({age:a+1,rt:{...cur},ovr:bp.ovr,pos:bp.pos});}
+return proj;};
+const aP=(age,pos)=>{const sp=["RB","CB","WR","S"],iq=["QB","OL","K","P"];if(age<=22)return{l:"Dev",e:"🌱",c:"#2ecc71"};if(age<=25)return{l:"Rise",e:"📈",c:"#3498db"};if(age<=27)return{l:"Prime",e:"⭐",c:"#f1c40f"};if(age<=29)return sp.includes(pos)?{l:"Decl.",e:"⚠️",c:"#e67e22"}:{l:"Late P.",e:"⭐",c:"#f1c40f"};if(age<=31)return iq.includes(pos)?{l:"Vet",e:"🔶",c:"#e67e22"}:{l:"Decl.",e:"🔻",c:"#e74c3c"};return iq.includes(pos)?{l:"Late V.",e:"🔻",c:"#e74c3c"}:{l:"Done",e:"❌",c:"#c0392b"};};
+const pG=a=>{if(a>=75)return{g:"A+",c:"#00e676"};if(a>=70)return{g:"A",c:"#2ecc71"};if(a>=65)return{g:"B+",c:"#66bb6a"};if(a>=60)return{g:"B",c:"#f1c40f"};if(a>=55)return{g:"C+",c:"#ffa726"};if(a>=50)return{g:"C",c:"#e67e22"};if(a>=45)return{g:"D",c:"#e74c3c"};return{g:"F",c:"#c0392b"};};
+const fS=a=>!a?"–":a>=1000?`$${(a/1000).toFixed(1)}M`:`$${a}K`;
+
+// ─── MOCK DRAFT ENGINE ─────────────────────────────
+const INTERCEPT=-86.546;
+const calcTeamVal=(players)=>{
+const byPos={};players.forEach(p=>{const pos=p.pos||"QB";if(!byPos[pos])byPos[pos]=[];byPos[pos].push(p.val||0);});
+Object.values(byPos).forEach(arr=>arr.sort((a,b)=>b-a));
+let mov=INTERCEPT;
+for(const pos of PP){const values=byPos[pos]||[];const w=TPW[pos]||[];
+for(let i=0;i<Math.max(values.length,w.length);i++){const v=values[i]||0;let wt=w[i];
+if(wt===undefined){const base=(3+w.length)*0.05;wt=w[w.length-1]*Math.pow(base,i-w.length+1);}
+mov+=wt*v;}}return mov;};
+
+const runMock=(data,season,myTid)=>{
+if(!data)return[];
+const prospects=data.players.filter(p=>p.tid===-2&&(!p.draftYear||p.draftYear===season))
+.map(p=>({pid:p.pid,name:p.name,pos:p.pos,ovr:p.ovr,pot:p.pot,val:p.valueFuzz||p.value||0,potGap:p.potGap}))
+.sort((a,b)=>b.val-a.val);
+const rosters={};data.teams.forEach(t=>{rosters[t.tid]=data.players.filter(p=>p.tid===t.tid).map(p=>({pos:p.pos,val:p.valueFuzz||p.value||0}));});
+const standingSorted=[...data.teams].sort((a,b)=>(a.won||0)-(b.won||0)||((b.lost||0)-(a.lost||0)));
+const allPicks=(data.draftPicks||[]).filter(p=>p.season===season);
+const maxRound=allPicks.length>0?Math.max(...allPicks.map(p=>p.round)):7;
+const available=[...prospects];const results=[];
+// Calculate team needs
+const teamNeeds={};
+// First calc league avg value per position
+const lgPosAvg={};PP.forEach(pos=>{const allAtPos=data.players.filter(p=>p.tid>=0&&p.pos===pos);const sc=(TPW[pos]||[1]).length;
+const byTeam=[];data.teams.forEach(t=>{const tp=allAtPos.filter(p=>p.tid===t.tid).sort((a,b)=>(b.valueFuzz||0)-(a.valueFuzz||0)).slice(0,sc);
+if(tp.length)byTeam.push(tp.reduce((s,p)=>s+(p.valueFuzz||0),0)/tp.length);});
+lgPosAvg[pos]=byTeam.length?byTeam.reduce((a,b)=>a+b,0)/byTeam.length:50;});
+data.teams.forEach(t=>{const tp=data.players.filter(p=>p.tid===t.tid);const needs=[];
+PP.forEach(pos=>{const have=tp.filter(p=>p.pos===pos);const sc=(TPW[pos]||[1]).length;
+if(have.length<sc){needs.push(pos);}else{
+const starters=have.sort((a,b)=>(b.valueFuzz||0)-(a.valueFuzz||0)).slice(0,sc);
+const avg=starters.reduce((s,p)=>s+(p.valueFuzz||0),0)/starters.length;
+if(avg<lgPosAvg[pos]*0.85)needs.push(pos);}});teamNeeds[t.tid]=needs;});
+for(let rd=1;rd<=maxRound;rd++){
+const rdPicks=allPicks.filter(p=>p.round===rd);
+const hasPickNums=rdPicks.some(p=>p.pick>0);
+let order=[];
+if(hasPickNums){
+order=rdPicks.sort((a,b)=>a.pick-b.pick).map(p=>{const ot=data.teams.find(t=>t.tid===p.originalTid);
+return{tid:p.tid,fromTid:p.originalTid,abbrevFrom:ot?.abbrev||"?"};});
+}else{
+for(const team of standingSorted){
+const pick=rdPicks.find(p=>p.originalTid===team.tid);
+if(pick){order.push({tid:pick.tid,fromTid:pick.originalTid,abbrevFrom:team.abbrev});}
+else if(!rdPicks.length){order.push({tid:team.tid,fromTid:team.tid,abbrevFrom:team.abbrev});}}}
+for(const pick of order){if(!available.length)break;
+const team=rosters[pick.tid]||[];const needs=teamNeeds[pick.fromTid]||[];
+const baseline=calcTeamVal(team);
+let bestIdx=0,bestScore=-Infinity;
+for(let i=0;i<Math.min(available.length,50);i++){const p=available[i];
+const impact=calcTeamVal([...team,{pos:p.pos,val:p.val}])-baseline;
+const score=Math.pow(Math.max(impact+0.05*p.val,0.001),40);
+if(score>bestScore){bestScore=score;bestIdx=i;}}
+const picked=available.splice(bestIdx,1)[0];
+const abbrev=data.teams.find(t=>t.tid===pick.tid)?.abbrev||"?";
+const fromAbbrev=pick.fromTid!==pick.tid?pick.abbrevFrom:null;
+const fillsNeed=needs.includes(picked.pos);
+results.push({pick:results.length+1,round:rd,tid:pick.tid,abbrev,fromAbbrev,player:picked,isMyPick:pick.tid===myTid,fillsNeed,needs});
+if(rosters[pick.tid])rosters[pick.tid].push({pos:picked.pos,val:picked.val});
+const origNeeds=teamNeeds[pick.fromTid];if(origNeeds){const ni=origNeeds.indexOf(picked.pos);if(ni>=0)origNeeds.splice(ni,1);}}}
+return results;};
+
+const pD=js=>{const raw=JSON.parse(js);let pl,tm,se;const gA=(g,k)=>{if(!g)return;if(Array.isArray(g)){const e=g.find(a=>a.key===k);return e?e.value:undefined;}return g[k];};
+if(Array.isArray(raw)){pl=raw;tm=[];se=new Date().getFullYear();}else if(raw.players){pl=raw.players;tm=raw.teams||[];se=gA(raw.gameAttributes,"season")||raw.startingSeason||new Date().getFullYear();}else throw new Error("Unknown format");
+pl=pl.filter(p=>p.tid===undefined||p.tid>=-2);
+const pr=pl.map(p=>{const r=p.ratings&&p.ratings.length>0?p.ratings[p.ratings.length-1]:null;if(!r)return null;const rt={};RK.forEach(k=>rt[k]=r[k]||0);rt.pos=r.pos||p.pos||"QB";const age=p.born?se-p.born.year:25;const ct=p.contract||{};const sal=ct.amount||0;const exp=ct.exp||0;const yl=exp?exp-se:0;
+const pos=r.pos||p.pos||"QB";const fz=r.fuzz||0;const ovr=bd(Math.round((r.ovr||0)+fz),0,100);const pot=bd(Math.round((r.pot||ovr)+fz),0,100);
+return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,potGap:pot-ovr,phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,valueFuzz:p.valueFuzz||p.value||0,rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
+let tl=tm.map(t=>{const s=t.seasons&&t.seasons.length>0?t.seasons[t.seasons.length-1]:null;return{tid:t.tid,name:`${t.region||""} ${t.name||""}`.trim(),abbrev:t.abbrev||`T${t.tid}`,won:s?s.won:0,lost:s?s.lost:0,seasons:t.seasons||[]};});
+if(!tl.length){const ts=[...new Set(pr.filter(p=>p.tid>=0).map(p=>p.tid))].sort((a,b)=>a-b);tl=ts.map(t=>({tid:t,name:`Team ${t}`,abbrev:`T${t}`,won:0,lost:0,seasons:[]}));}
+return{players:pr,teams:tl,season:se,draftPicks:raw.draftPicks||[],
+capSettings:{salaryCap:gA(raw.gameAttributes,"salaryCap")||0,luxuryPayroll:gA(raw.gameAttributes,"luxuryPayroll")||0,minPayroll:gA(raw.gameAttributes,"minPayroll")||0,salaryCapType:gA(raw.gameAttributes,"salaryCapType")||""}};};
+
+// ─── STYLES ─────────────────────────────────────────
+const M={fontFamily:"'JetBrains Mono',monospace"};
+const H={fontFamily:"'Anybody',sans-serif",fontWeight:800};
+const GR={roster:"minmax(100px,1fr) 32px 28px 34px 38px 38px 56px 32px",fa:"minmax(100px,1fr) 32px 28px 34px 38px 38px 56px",draft:"minmax(100px,1fr) 32px 28px 36px 38px 38px 36px"};
+const TABS=[{id:"depth",label:"Roster"},{id:"grades",label:"Grades"},{id:"draft",label:"Draft"},{id:"moves",label:"Moves"},{id:"compare",label:"Compare"},{id:"aging",label:"Aging"}];
+
+function App(){
+const[data,setData]=useState(null);const[err,setErr]=useState(null);const[myTid,setMyTid]=useState(null);
+const[tSel,setTSel]=useState(false);const[tab,setTab]=useState("roster");const[pf,setPf]=useState("ALL");
+const[sort,setSort]=useState({key:"ovr",dir:"desc"});const[dyf,setDyf]=useState("ALL");
+const[drag,setDrag]=useState(false);const[dark,setDark]=useState(true);const[selP,setSelP]=useState(null);
+const[mockRes,setMockRes]=useState(null);const[posSort,setPosSort]=useState({});const[mSort,setMSort]=useState({});
+const[compMode,setCompMode]=useState("team");const[compTid,setCompTid]=useState(null);
+const[compP1,setCompP1]=useState(null);const[compP2,setCompP2]=useState(null);
+const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
+const fileRef=useRef(null);
+const $=dark?TH.dark:TH.light;
+useEffect(()=>{document.body.style.background=$.bg;document.body.style.color=$.t;},[$.bg,$.t]);
+
+const load=t=>{try{setErr(null);setData(pD(t));setTSel(false);setMyTid(null);}catch(e){setErr(e.message);}};
+const hFile=f=>{if(!f)return;const r=new FileReader();r.onload=e=>load(e.target.result);r.readAsText(f);};
+const hDrop=e=>{e.preventDefault();setDrag(false);hFile(e.dataTransfer.files[0]);};
+const selTm=t=>{setMyTid(t);setTSel(true);setTab("depth");setPf("ALL");setSort({key:"ovr",dir:"desc"});};
+const oS=k=>setSort(s=>({key:k,dir:s.key===k&&s.dir==="desc"?"asc":"desc"}));
+const cTab=t=>{setTab(t);setPf("ALL");setSort({key:t==="draft"?"draftRank":t==="aging"?"chg3":"ovr",dir:t==="draft"?"asc":t==="aging"?"asc":"desc"});setDyf("ALL");};
+const dSort=useCallback(l=>[...l].sort((a,b)=>{let va=a[sort.key],vb=b[sort.key];if(typeof va==="string")return sort.dir==="asc"?va.localeCompare(vb):vb.localeCompare(va);return sort.dir==="asc"?(va-vb):(vb-va);}),[sort]);
+const dFilt=useCallback(l=>{if(pf==="ALL")return l;if(["OFF","DEF","ST"].includes(pf))return l.filter(p=>GM[p.pos]===pf);return l.filter(p=>p.pos===pf);},[pf]);
+
+const myP=useMemo(()=>data?data.players.filter(p=>p.tid===myTid):[],[data,myTid]);
+const fas=useMemo(()=>data?data.players.filter(p=>p.tid===-1):[],[data]);
+const dps=useMemo(()=>{if(!data)return[];const r=data.players.filter(p=>p.tid===-2);const by={};r.forEach(p=>{const y=p.draftYear||0;if(!by[y])by[y]=[];by[y].push(p);});Object.keys(by).forEach(y=>{by[y].sort((a,b)=>b.valueFuzz-a.valueFuzz);by[y].forEach((p,i)=>{p.draftRank=i+1;});});return r;},[data]);
+const dY=useMemo(()=>[...new Set(dps.map(p=>p.draftYear).filter(Boolean))].sort(),[dps]);
+const expP=useMemo(()=>myP.filter(p=>p.expiring).sort((a,b)=>b.ovr-a.ovr),[myP]);
+const lA=useMemo(()=>{if(!data)return{};const a={};PP.forEach(pos=>{const sc=(TPW[pos]||[1]).length;const ta=[];data.teams.forEach(t=>{const tp=data.players.filter(p=>p.tid===t.tid&&p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,sc);if(tp.length>0)ta.push(tp.reduce((s,p)=>s+p.ovr,0)/tp.length);});a[pos]=ta.length>0?Math.round(ta.reduce((a,b)=>a+b,0)/ta.length):0;});return a;},[data]);
+const pGr=useMemo(()=>{if(!myP.length)return{};const g={};PP.forEach(pos=>{const pp=myP.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);const sc=(TPW[pos]||[1]).length;const st=pp.slice(0,sc);const ao=st.length>0?Math.round(st.reduce((s,p)=>s+p.ovr,0)/st.length):0;const la=lA[pos]||0;g[pos]={...pG(ao),avgOvr:ao,count:pp.length,sc,tw:(TPW[pos]||[]).reduce((a,b)=>a+b,0),la,diff:ao-la};});return g;},[myP,lA]);
+const nR=useMemo(()=>Object.entries(pGr).map(([pos,g])=>{const sh=Math.max(0,PSC[pos]-g.count);const belowAvg=Math.max(0,g.la-g.avgOvr);return{pos,...g,score:belowAvg*g.tw*10*(1+(sh/PSC[pos])*3)+sh*50+(g.diff<0?Math.abs(g.diff)*g.tw*5:0),shortage:sh};}).sort((a,b)=>b.score-a.score),[pGr]);
+const faN=useMemo(()=>{if(!fas.length||!nR.length)return fas;const nm={};nR.forEach((n,i)=>{nm[n.pos]=nR.length-i;});return[...fas].sort((a,b)=>((nm[b.pos]||0)*b.ovr)-((nm[a.pos]||0)*a.ovr));},[fas,nR]);
+const tr=useMemo(()=>{if(!myP.length)return{sell:[],keep:[]};const sell=myP.filter(p=>{const sp=["RB","CB","WR","S"].includes(p.pos);if(sp&&p.age>=27&&p.ovr>=55)return true;if(!sp&&p.age>=30&&p.ovr>=55)return true;return p.age>=32;}).sort((a,b)=>b.ovr-a.ovr);const keep=myP.filter(p=>p.age<=25&&p.pot>=65&&p.potGap>=8).sort((a,b)=>b.potGap-a.potGap);return{sell,keep};},[myP]);
+
+const fillGap=useMemo(()=>{if(!data||!Object.keys(pGr).length||!nR.length)return[];
+const fas=data.players.filter(p=>p.tid===-1);
+return nR.filter(n=>n.diff<0).slice(0,5).map(n=>{
+const top=fas.filter(p=>p.pos===n.pos).sort((a,b)=>b.ovr-a.ovr).slice(0,5);
+return{pos:n.pos,grade:n.g,gradeColor:n.c,diff:n.diff,avgOvr:n.avgOvr,la:n.la,players:top};
+}).filter(g=>g.players.length>0);},[data,pGr,nR]);
+const nPS=useMemo(()=>new Set(nR.filter(n=>n.g==="F"||n.g==="D"||n.g==="C"||n.g==="C+"||n.shortage>0||n.diff<-5).map(n=>n.pos)),[nR]);
+
+// Draft Pick Tracker
+const draftTracker=useMemo(()=>{
+if(!data||myTid===null)return null;
+// Estimate draft position from standings
+const standings=data.teams.map(t=>({tid:t.tid,abbrev:t.abbrev,won:t.won||0,lost:t.lost||0})).sort((a,b)=>a.won-b.won||(b.lost-a.lost));
+const myRecord=standings.find(s=>s.tid===myTid);
+// Use actual pick number if lottery has been run
+const myR1=(data.draftPicks||[]).find(p=>p.season===data.season&&p.round===1&&p.tid===myTid);
+const myPick=myR1&&myR1.pick>0?myR1.pick:standings.findIndex(s=>s.tid===myTid)+1;
+const pickSource=myR1&&myR1.pick>0?"lottery":"standings";
+// Actual draft picks owned
+const myDraftPicks=(data.draftPicks||[]).filter(p=>p.tid===myTid).map(p=>{
+const fromTeam=p.originalTid!==p.tid?data.teams.find(t=>t.tid===p.originalTid):null;
+return{season:p.season,round:p.round,pick:p.pick||0,fromTeam:fromTeam?fromTeam.abbrev:null,isAcquired:p.originalTid!==p.tid};
+}).sort((a,b)=>a.season-b.season||a.round-b.round);
+// Picks traded away (originalTid is us but tid is someone else)
+const tradedAway=(data.draftPicks||[]).filter(p=>p.originalTid===myTid&&p.tid!==myTid).map(p=>{
+const toTeam=data.teams.find(t=>t.tid===p.tid);
+return{season:p.season,round:p.round,toTeam:toTeam?toTeam.abbrev:"?",};
+}).sort((a,b)=>a.season-b.season||a.round-b.round);
+const pickYears=[...new Set(myDraftPicks.map(p=>p.season))].sort();
+// Draft history
+const history=data.players.filter(p=>p.draft&&p.draft.tid===myTid&&p.draft.round>0)
+.map(p=>{const d=p.draft;const curOvr=p.ovr||0;
+const dev=curOvr-d.ovr;
+const grade=curOvr>=d.pot?"A+":curOvr>=d.pot*0.9?"A":curOvr>=d.pot*0.75?"B":curOvr>=d.pot*0.6?"C":curOvr>=d.ovr?"D":"F";
+const gradeColor=grade.startsWith("A")?"#2ecc71":grade==="B"?"#f1c40f":grade==="C"?"#e67e22":"#e74c3c";
+return{pid:p.pid,name:p.name,pos:p.pos,year:d.year,round:d.round,pick:d.pick,
+dOvr:d.ovr,dPot:d.pot,curOvr,curPot:p.pot||0,tid:p.tid,dev,grade,gradeColor,onTeam:p.tid===myTid};})
+.sort((a,b)=>b.year-a.year||a.round-b.round||a.pick-b.pick);
+const histYears=[...new Set(history.map(h=>h.year))].sort((a,b)=>b-a).slice(0,4);
+return{myPick,myRecord,pickSource,myDraftPicks,tradedAway,pickYears,history,years:histYears,standings};},[data,myTid]);
+
+// Aging projections for entire roster (must come before capData)
+const agingData=useMemo(()=>{
+if(!myP.length)return{players:[],posForecasts:[],drops:[],risers:[],ageDist:[]};
+const players=myP.map(p=>{const proj=projectRatings(p.rt,p.age,3);
+return{...p,ovr1:proj[0]?.ovr||p.ovr,ovr2:proj[1]?.ovr||p.ovr,ovr3:proj[2]?.ovr||p.ovr,chg3:(proj[2]?.ovr||p.ovr)-p.ovr};});
+// Position group forecast
+const posForecasts=PP.map(pos=>{const pp=players.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);const sc=(TPW[pos]||[1]).length;const st=pp.slice(0,sc);if(!st.length)return{pos,now:0,y1:0,y2:0,y3:0,chg:0};
+const avg=arr=>st.length?Math.round(arr.reduce((s,v)=>s+v,0)/st.length):0;
+return{pos,now:avg(st.map(p=>p.ovr)),y1:avg(st.map(p=>p.ovr1)),y2:avg(st.map(p=>p.ovr2)),y3:avg(st.map(p=>p.ovr3)),chg:avg(st.map(p=>p.ovr3))-avg(st.map(p=>p.ovr))};}).filter(f=>f.now>0);
+// Top drops & risers
+const sorted=[...players].sort((a,b)=>a.chg3-b.chg3);
+const drops=sorted.filter(p=>p.chg3<0).slice(0,7);
+const risers=[...players].sort((a,b)=>b.chg3-a.chg3).filter(p=>p.chg3>0).slice(0,7);
+// Age distribution
+const phases={Dev:0,Rise:0,Prime:0,"Late P.":0,Decl:0,Vet:0,Done:0};
+players.forEach(p=>{const key=p.phase.l.replace(".","");if(key in phases)phases[key]++;else{const k2=Object.keys(phases).find(k=>key.startsWith(k));if(k2)phases[k2]++;}});
+const ageDist=Object.entries(phases).filter(([,v])=>v>0).map(([k,v])=>({label:k,count:v}));
+return{players,posForecasts,drops,risers,ageDist};},[myP]);
+
+// Cap/salary analysis (depends on agingData)
+const capData=useMemo(()=>{
+if(!myP.length||!data)return null;
+const total=myP.reduce((s,p)=>s+p.salary,0);
+const expRel=expP.reduce((s,p)=>s+p.salary,0);
+const cap=data.capSettings||{};
+const byPos=PP.map(pos=>{const pp=myP.filter(p=>p.pos===pos);const sum=pp.reduce((s,p)=>s+p.salary,0);return{pos,sum,count:pp.length,avg:pp.length?Math.round(sum/pp.length):0};}).sort((a,b)=>b.sum-a.sum);
+const maxPosSal=Math.max(...byPos.map(p=>p.sum),1);
+const ap=agingData.players||[];const apMap={};ap.forEach(p=>{apMap[p.pid]=p;});
+const enriched=myP.map(p=>{const ag=apMap[p.pid];const chg3=ag?ag.chg3:0;const ovr3=ag?ag.ovr3:p.ovr;
+const projEnd=Math.round(p.ovr+chg3*Math.min(p.yrsLeft,3)/3);return{...p,chg3,ovr3,projEnd};});
+const badContracts=enriched.filter(p=>p.salary>=3000&&p.yrsLeft>=2&&p.projEnd<65)
+.map(p=>({...p,badScore:p.salary*(65-p.projEnd)*p.yrsLeft/1000}))
+.sort((a,b)=>b.badScore-a.badScore).slice(0,7);
+const extWatch=enriched.filter(p=>p.yrsLeft<=1&&p.ovr>=55&&p.age<=30)
+.sort((a,b)=>b.ovr-a.ovr).slice(0,7);
+const posAvg={};PP.forEach(pos=>{const pp=enriched.filter(p=>p.pos===pos);if(pp.length)posAvg[pos]=Math.round(pp.reduce((s,p)=>s+p.ovr,0)/pp.length);});
+const cuts=enriched.filter(p=>p.salary>=2000&&posAvg[p.pos]&&p.ovr<posAvg[p.pos])
+.map(p=>({...p,cutScore:p.salary*(posAvg[p.pos]-p.ovr)/1000,posAvgOvr:posAvg[p.pos]}))
+.sort((a,b)=>b.cutScore-a.cutScore).slice(0,7);
+const resignWatch=data.players.filter(p=>p.tid===-1&&p.statsTids&&p.statsTids.includes(myTid))
+.sort((a,b)=>b.ovr-a.ovr).slice(0,10);
+// VOR: Value Over Replacement — each player vs next man below them
+const vor=(()=>{const byPos={};myP.forEach(p=>{if(!byPos[p.pos])byPos[p.pos]=[];byPos[p.pos].push(p);});
+Object.values(byPos).forEach(arr=>arr.sort((a,b)=>b.ovr-a.ovr));
+return myP.map(p=>{const group=byPos[p.pos]||[];const rank=group.findIndex(q=>q.pid===p.pid);
+const next=group[rank+1]||null;const nextOvr=next?next.ovr:0;const vorVal=p.ovr-nextOvr;
+const perVor=vorVal>0?Math.round(p.salary/vorVal):0;
+return{...p,rank:rank+1,depthCount:group.length,nextOvr,nextName:next?next.name:"—",vorVal,perVor};}).sort((a,b)=>b.vorVal-a.vorVal);})();
+return{total,cap,expRel,byPos,maxPosSal,badContracts,extWatch,cuts,resignWatch,vor};},[myP,data,expP,agingData]);
+
+
+
+const cs={background:$.card,borderRadius:10,border:`1px solid ${$.cb}`,padding:14,marginBottom:12};
+
+const getCat=(p,chg)=>{
+if(p.age<=25&&p.potGap>=8)return{l:"KEEP",c:"#2ecc71"};
+if(p.age<=25&&chg>0&&p.potGap>=5)return{l:"KEEP",c:"#2ecc71"};
+if(p.age<=27&&p.ovr>=55&&p.potGap>=5)return{l:"KEEP",c:"#2ecc71"};
+if(p.age<=29&&p.ovr>=70)return{l:"KEEP",c:"#2ecc71"};
+if(p.ovr>=60&&p.age<=30)return{l:"KEY",c:"#e67e22"};
+if(p.ovr>=55&&p.age<=27&&chg>0)return{l:"KEY",c:"#e67e22"};
+if(p.age<=26&&chg>0)return{l:"EVAL",c:"#f1c40f"};
+if(p.ovr>=50&&p.age<=31)return{l:"EVAL",c:"#f1c40f"};
+if(p.potGap>=10&&p.age<=28)return{l:"EVAL",c:"#f1c40f"};
+return{l:"PASS",c:$.t4};};
+
+const ThemeBtn=()=><button onClick={()=>setDark(d=>!d)} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 9px",fontSize:12,cursor:"pointer"}}>{dark?"☀️":"🌙"}</button>;
+
+const Tip=({text})=><span className="tip">
+<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:15,height:15,borderRadius:"50%",background:$.btn,border:`1px solid ${$.btnb}`,fontSize:9,color:$.t5,fontWeight:700}}>?</span>
+<span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`}}>{text}</span>
+</span>;
+
+const SH=({label,sk,align})=>{const a=sort.key===sk;return <span onClick={()=>oS(sk)} style={{cursor:"pointer",fontSize:11,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(sort.dir==="asc"?" ↑":" ↓"):""}</span>;};
+
+const MSH=({sec,label,sk,align})=>{const s=mSort[sec]||{key:"ovr",dir:"desc"};const a=s.key===sk;return <span onClick={()=>setMSort(ms=>({...ms,[sec]:{key:sk,dir:ms[sec]?.key===sk&&ms[sec]?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:10,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
+
+const mSrt=(arr,sec)=>{const s=mSort[sec];if(!s)return arr;return[...arr].sort((a,b)=>{const k=s.key,d=s.dir;if(k==="name"||k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});};
+
+const PR=({p,i,mode,isNeed})=>{const c=PC[p.pos]||"#888";const ie=mode==="roster"&&p.expiring;return(
+<div style={{display:"grid",gridTemplateColumns:GR[mode],alignItems:"center",gap:4,padding:"6px 7px",background:isNeed?$.need:ie?$.exp:i%2===0?$.row:"transparent",borderRadius:5,fontSize:12,borderLeft:isNeed?"2px solid #2ecc71":ie?"2px solid #e74c3c":"2px solid transparent"}}>
+<span onClick={()=>setSelP(p)} style={{fontWeight:600,color:$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}{ie&&<span style={{fontSize:9,color:"#e74c3c",marginLeft:3}}>⚠️</span>}{isNeed&&<span style={{fontSize:9,color:"#2ecc71",marginLeft:3,...M}}>NEED</span>}</span>
+<span style={{...M,fontWeight:700,color:c,fontSize:10,textAlign:"center"}}>{p.pos}</span>
+<span style={{color:$.t7,textAlign:"center",fontSize:11}}>{p.age}</span>
+{mode==="draft"?<span style={{...M,fontSize:11,fontWeight:700,color:p.draftRank<=10?"#f1c40f":p.draftRank<=32?$.t8:$.t4,textAlign:"center"}}>#{p.draftRank}</span>:<span style={{fontSize:11,color:p.phase.c,textAlign:"center"}}>{p.phase.e}</span>}
+<span style={{...M,fontWeight:700,color:$.t0,fontSize:13,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontWeight:600,color:p.potGap>=15?"#2ecc71":p.potGap>=8?"#f1c40f":$.t6,fontSize:12,textAlign:"center"}}>{p.pot}</span>
+{mode==="roster"&&<span style={{...M,fontSize:10,color:ie?"#e74c3c":$.t5,textAlign:"right"}}>{fS(p.salary)}</span>}
+{mode==="roster"&&<span style={{...M,fontSize:10,color:ie?"#e74c3c":p.yrsLeft<=1?"#e67e22":$.t4,textAlign:"center"}}>{p.yrsLeft>0?`${p.yrsLeft}y`:p.expYear?"exp":"–"}</span>}
+{mode==="fa"&&<span style={{...M,fontSize:10,color:$.t5,textAlign:"right"}}>{fS(p.salary)}</span>}
+{mode==="draft"&&<span style={{...M,fontSize:10,color:p.potGap>=15?"#2ecc71":p.potGap>=8?"#f1c40f":$.t3,textAlign:"center"}}>+{p.potGap}</span>}
+</div>);};
+
+const PlayerDetail=({p,onClose})=>{
+const ovrAll=PP.map(pos=>({pos,ovr:cO(p.rt,pos)})).sort((a,b)=>b.ovr-a.ovr);
+const bestPos=ovrAll[0];
+const canSwitch=bestPos.pos!==p.pos&&bestPos.ovr>p.ovr;
+const posColor=PC[p.pos]||"#888";
+// Group ratings by category
+const cats=[
+{label:"Physical",keys:["hgt","stre","spd","endu"]},
+{label:"Passing",keys:["thv","thp","tha"]},
+{label:"Skill",keys:["bsc","elu","rtr","hnd"]},
+{label:"Blocking",keys:["pbk","rbk"]},
+{label:"Defense",keys:["pcv","tck","prs","rns"]},
+{label:"Special Teams",keys:["kpw","kac","ppw","pac"]},
+];
+return(<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.6)",zIndex:1000,display:"flex",justifyContent:"center",alignItems:"flex-start",paddingTop:40,overflowY:"auto"}} onClick={onClose}>
+<div style={{background:$.bg,border:`1px solid ${$.cb}`,borderRadius:14,padding:20,maxWidth:520,width:"95%",maxHeight:"90vh",overflowY:"auto",position:"relative"}} onClick={e=>e.stopPropagation()}>
+{/* Close */}
+<button onClick={onClose} style={{position:"absolute",top:10,right:14,background:"none",border:"none",color:$.t5,fontSize:20,cursor:"pointer",padding:4}}>✕</button>
+
+{/* Header */}
+<div style={{marginBottom:16}}>
+<div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+<span style={{...H,fontSize:22,color:posColor}}>{p.pos}</span>
+<span style={{fontSize:18,fontWeight:700,color:$.t}}>{p.name}</span>
+</div>
+<div style={{display:"flex",gap:12,flexWrap:"wrap",fontSize:12,color:$.t6}}>
+<span>Age <strong style={{color:$.t}}>{p.age}</strong></span>
+<span style={{color:p.phase.c}}>{p.phase.e} {p.phase.l}</span>
+<span>OVR <strong style={{color:$.t0,...M}}>{p.ovr}</strong></span>
+<span>Pot <strong style={{color:p.potGap>=10?"#2ecc71":$.t,...M}}>{p.pot}</strong></span>
+{p.salary>0&&<span>{fS(p.salary)} · {p.yrsLeft>0?p.yrsLeft+"y left":"expiring"}</span>}
+</div>
+</div>
+
+{/* Position switch recommendation */}
+{canSwitch&&<div style={{background:"rgba(46,204,113,0.1)",border:"1px solid rgba(46,204,113,0.3)",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:12}}>
+<span style={{color:"#2ecc71",fontWeight:700}}>💡 Position Switch:</span>{" "}
+<span style={{color:$.t}}>Move to <strong style={{color:PC[bestPos.pos]}}>{bestPos.pos}</strong> for <strong>+{bestPos.ovr-p.ovr} OVR</strong> ({p.ovr} → {bestPos.ovr})</span>
+</div>}
+
+{/* OVR at all positions */}
+<div style={{marginBottom:16}}>
+<div style={{fontSize:11,fontWeight:700,color:$.t5,marginBottom:6,letterSpacing:0.5,textTransform:"uppercase"}}>OVR by Position</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:4}}>
+{ovrAll.map(o=>{const isCur=o.pos===p.pos;const isBest=o.pos===bestPos.pos;return(
+<div key={o.pos} style={{padding:"5px 6px",borderRadius:6,background:isCur?`${posColor}20`:isBest&&canSwitch?"rgba(46,204,113,0.12)":$.row,border:isCur?`1px solid ${posColor}50`:isBest&&canSwitch?"1px solid rgba(46,204,113,0.3)":`1px solid ${$.cb}`,textAlign:"center"}}>
+<div style={{...M,fontWeight:700,fontSize:10,color:PC[o.pos]||"#888"}}>{o.pos}</div>
+<div style={{...M,fontWeight:700,fontSize:15,color:isCur?$.t0:o.ovr>=p.ovr?"#2ecc71":$.t5}}>{o.ovr}</div>
+{isCur&&<div style={{fontSize:8,color:posColor,fontWeight:600}}>CURRENT</div>}
+{isBest&&canSwitch&&!isCur&&<div style={{fontSize:8,color:"#2ecc71",fontWeight:600}}>BEST</div>}
+</div>);})}
+</div>
+</div>
+
+{/* Aging Projection */}
+{(()=>{const proj=projectRatings(p.rt,p.age,3);const timeline=[{label:"Now",age:p.age,ovr:p.ovr,pos:p.pos},...proj.map((pr,i)=>({label:`+${i+1}`,age:pr.age,ovr:pr.ovr,pos:pr.pos}))];
+const maxOvr=Math.max(...timeline.map(t=>t.ovr));const minOvr=Math.min(...timeline.map(t=>t.ovr));
+// Find biggest rating changes over 3 seasons
+const rChanges=RK.filter(k=>k!=="hgt").map(k=>({key:k,name:RN[k],now:p.rt[k],then:proj[2]?.rt[k]||p.rt[k],chg:(proj[2]?.rt[k]||p.rt[k])-p.rt[k]})).filter(r=>Math.abs(r.chg)>=2).sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg));
+return(
+<div style={{marginBottom:16}}>
+<div style={{fontSize:11,fontWeight:700,color:$.t5,marginBottom:8,letterSpacing:0.5,textTransform:"uppercase"}}>Aging Projection (3 Seasons)</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:6,marginBottom:10}}>
+{timeline.map((t,i)=>{const prev=i>0?timeline[i-1].ovr:t.ovr;const delta=t.ovr-prev;const totalDelta=t.ovr-p.ovr;
+return(<div key={i} style={{textAlign:"center",padding:"8px 4px",borderRadius:8,background:i===0?`${posColor}15`:$.row,border:i===0?`1px solid ${posColor}40`:`1px solid ${$.cb}`}}>
+<div style={{fontSize:10,color:$.t5,fontWeight:600,marginBottom:2}}>{t.label}</div>
+<div style={{fontSize:10,color:$.t6,marginBottom:4}}>Age {t.age}</div>
+<div style={{...M,fontSize:20,fontWeight:800,color:i===0?$.t0:totalDelta>0?"#2ecc71":totalDelta===0?$.t7:totalDelta>=-3?"#e67e22":"#e74c3c"}}>{t.ovr}</div>
+{i>0&&<div style={{...M,fontSize:11,fontWeight:700,color:delta>0?"#2ecc71":delta===0?$.t4:delta>=-2?"#e67e22":"#e74c3c"}}>{delta>0?"+":""}{delta}</div>}
+{i>0&&t.pos!==p.pos&&<div style={{fontSize:8,color:"#e67e22",marginTop:2}}>→{t.pos}</div>}
+</div>);})}
+</div>
+{rChanges.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:"2px 12px"}}>
+{rChanges.slice(0,6).map(r=>(<div key={r.key} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
+<span style={{color:$.t5,width:80}}>{r.name}</span>
+<span style={{...M,color:$.t6}}>{r.now}</span>
+<span style={{...M,color:$.t4}}>→</span>
+<span style={{...M,fontWeight:600,color:r.chg>0?"#2ecc71":r.chg>=-3?"#e67e22":"#e74c3c"}}>{r.then}</span>
+<span style={{...M,fontSize:9,color:r.chg>0?"#2ecc71":r.chg>=-3?"#e67e22":"#e74c3c"}}>{r.chg>0?"+":""}{r.chg}</span>
+</div>))}
+</div>}
+</div>);})()}
+
+{/* Raw Ratings */}
+<div>
+<div style={{fontSize:11,fontWeight:700,color:$.t5,marginBottom:6,letterSpacing:0.5,textTransform:"uppercase"}}>Ratings</div>
+{cats.map(cat=>{const relevant=cat.keys.filter(k=>p.rt[k]>0);if(!relevant.length)return null;return(
+<div key={cat.label} style={{marginBottom:10}}>
+<div style={{fontSize:10,color:$.t4,marginBottom:4,fontWeight:600}}>{cat.label}</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(2, 1fr)",gap:"3px 16px"}}>
+{cat.keys.map(k=>{const v=p.rt[k];return(
+<div key={k} style={{display:"flex",alignItems:"center",gap:6}}>
+<span style={{fontSize:11,color:$.t5,width:85}}>{RN[k]||k}</span>
+<div style={{flex:1,height:10,background:$.bar,borderRadius:3,overflow:"hidden"}}>
+<div style={{width:`${v}%`,height:"100%",background:v>=70?`#2ecc71`:v>=50?posColor:`#e74c3c`,borderRadius:3,transition:"width 0.3s"}}/>
+</div>
+<span style={{...M,fontSize:11,fontWeight:600,color:v>=70?"#2ecc71":v>=50?$.t:v>=30?$.t5:"#e74c3c",width:24,textAlign:"right"}}>{v}</span>
+</div>);})}
+</div>
+</div>);})}
+</div>
+
+</div></div>);};
+
+// ─── NO DATA: LANDING PAGE ──────────────────────────
+if(!data) return(
+<div style={{padding:"40px 16px",maxWidth:620,margin:"0 auto"}}>
+<div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}><ThemeBtn/></div>
+<h1 style={{...H,fontSize:32,textAlign:"center",letterSpacing:3,margin:"0 0 6px",background:"linear-gradient(135deg,#e63946,#f4a261,#2a9d8f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1>
+<p style={{textAlign:"center",fontSize:13,color:$.t5,margin:"0 0 6px",...M}}>Roster analysis powered by real game formulas</p>
+<p style={{textAlign:"center",fontSize:11,color:$.t3,margin:"0 0 28px"}}>Built from the ZenGM source code — every calculation matches the actual game engine</p>
+
+{/* Feature Grid */}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
+{[
+{icon:"📋",title:"Roster & Grades",desc:"Sortable depth chart by position, grades vs. league average, starter/backup hierarchy with OVR, Pot, Age, Contract"},
+{icon:"🎯",title:"Draft Center",desc:"Mock draft simulator (all 7 rounds) using the exact AI algorithm, draft pick tracker, hit rate grading, lottery-aware"},
+{icon:"💰",title:"Moves & Contracts",desc:"Cap space overview, bad contracts, fill the gap (FA suggestions), extension watch, sell high, trade candidates, value over replacement"},
+{icon:"📈",title:"Aging Projections",desc:"3-season OVR forecasts based on the game's aging curves, position group forecasts, biggest risers & drops"},
+{icon:"⚔️",title:"Compare",desc:"Team vs team with position-by-position breakdown and weighted OVR. Player vs player with all 21 ratings side by side, key ratings highlighted"},
+{icon:"🔍",title:"Player Detail",desc:"Click any player for all 21 ratings, OVR at every position, position switch recommendations, individual aging projections"},
+].map(f=><div key={f.title} style={{padding:"12px",borderRadius:10,background:$.card,border:`1px solid ${$.cb}`}}>
+<div style={{fontSize:20,marginBottom:4}}>{f.icon}</div>
+<div style={{fontSize:12,fontWeight:700,color:$.t,marginBottom:3}}>{f.title}</div>
+<div style={{fontSize:10,color:$.t5,lineHeight:1.5}}>{f.desc}</div>
+</div>)}
+</div>
+
+{/* File Upload */}
+<div onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)} onDrop={hDrop} onClick={()=>fileRef.current?.click()}
+style={{...cs,padding:"32px 20px",textAlign:"center",cursor:"pointer",border:drag?`2px dashed #e63946`:`2px dashed ${$.t1}`,transition:"all 0.2s"}}>
+<input ref={fileRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>hFile(e.target.files[0])}/>
+<div style={{fontSize:36,marginBottom:8}}>{drag?"📂":"📁"}</div>
+<div style={{fontSize:15,fontWeight:600,color:$.t8,marginBottom:4}}>{drag?"Drop it here!":"Drop your FBGM export JSON here"}</div>
+<div style={{fontSize:12,color:$.t4}}>or click to browse files</div>
+</div>
+{err&&<div style={{color:"#e74c3c",fontSize:12,margin:"8px 0",textAlign:"center"}}>⚠️ {err}</div>}
+
+{/* How to export */}
+<div style={{...cs,padding:14,marginTop:8}}>
+<div style={{fontSize:12,fontWeight:700,color:$.t7,marginBottom:6}}>How to export your league:</div>
+<div style={{fontSize:11,color:$.t5,lineHeight:1.8}}>
+In Football GM → <strong style={{color:$.t}}>Tools</strong> → <strong style={{color:$.t}}>Export League</strong><br/>
+Select these options:
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 16px",margin:"8px 0 10px",fontSize:11}}>
+<div style={{color:"#2ecc71"}}>✅ <strong>Players</strong> <span style={{color:$.t4}}>— required</span></div>
+<div style={{color:"#2ecc71"}}>✅ <strong>All team data</strong> <span style={{color:$.t4}}>— required</span></div>
+<div style={{color:"#2ecc71"}}>✅ <strong>Draft picks</strong> <span style={{color:$.t4}}>— for Mock Draft & Pick Tracker</span></div>
+<div style={{color:$.t3}}>☐ Schedule <span style={{color:$.t2}}>— not needed</span></div>
+<div style={{color:$.t3}}>☐ League settings <span style={{color:$.t2}}>— not needed</span></div>
+<div style={{color:$.t3}}>☐ Game state <span style={{color:$.t2}}>— not needed</span></div>
+<div style={{color:$.t3}}>☐ News feed <span style={{color:$.t2}}>— not needed</span></div>
+<div style={{color:$.t3}}>☐ Box scores <span style={{color:$.t2}}>— not needed</span></div>
+</div>
+<div style={{fontSize:10,color:$.t4,lineHeight:1.6}}>
+💡 <strong style={{color:$.t5}}>Tip:</strong> Export mid-season for accurate draft order predictions. Preseason exports work too but standings aren't available yet.
+</div>
+</div>
+
+<div style={{textAlign:"center",marginTop:16,fontSize:10,color:$.t2,...M}}>
+Formulas extracted from <span style={{color:$.t4}}>zengm-games/zengm</span> · Open source
+</div>
+</div>);
+
+// ─── TEAM SELECT ────────────────────────────────────
+if(!tSel){const td=data.teams.map(t=>{const tp=data.players.filter(p=>p.tid===t.tid).sort((a,b)=>b.ovr-a.ovr);const avg=tp.length>0?Math.round(tp.reduce((s,p)=>s+p.ovr,0)/tp.length):0;return{...t,count:tp.length,avg,gr:pG(avg),top:tp.slice(0,3)};}).sort((a,b)=>b.avg-a.avg);
+return(<div style={{padding:"24px 16px",maxWidth:600,margin:"0 auto"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h1 style={{...H,fontSize:22,letterSpacing:2,background:"linear-gradient(135deg,#e63946,#f4a261,#2a9d8f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><ThemeBtn/></div>
+<p style={{textAlign:"center",fontSize:12,color:$.t5,margin:"0 0 4px",...M}}>Season {data.season} · {data.players.length} players</p>
+<p style={{textAlign:"center",fontSize:15,color:$.t8,margin:"0 0 14px",fontWeight:600}}>Select your team:</p>
+<div style={{display:"flex",flexDirection:"column",gap:5}}>{td.map(t=>(
+<button key={t.tid} onClick={()=>selTm(t.tid)} style={{display:"flex",flexDirection:"column",gap:3,padding:"9px 12px",background:$.card,border:`1px solid ${$.cb}`,borderRadius:8,cursor:"pointer",textAlign:"left",width:"100%"}}>
+<div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}><span style={{...M,fontWeight:700,fontSize:12,color:"#e63946",minWidth:32}}>{t.abbrev}</span><span style={{fontWeight:600,fontSize:13,color:$.t,flex:1}}>{t.name}</span><span style={{fontSize:11,color:$.t6}}>{t.count} pl.</span><span style={{...M,fontSize:12,fontWeight:600,color:$.t8}}>ø{t.avg}</span><span style={{...H,fontSize:14,color:t.gr.c,minWidth:24,textAlign:"right"}}>{t.gr.g}</span></div>
+{t.top.length>0&&<div style={{display:"flex",gap:6,marginLeft:40,flexWrap:"wrap"}}>{t.top.map(p=><span key={p.pid} style={{fontSize:10,color:$.t4,...M}}><span style={{color:PC[p.pos]}}>{p.pos}</span> {p.name.split(" ").pop()} {p.ovr}</span>)}</div>}
+</button>))}</div>
+<button onClick={()=>setData(null)} style={{width:"100%",marginTop:14,padding:"9px",border:`1px solid ${$.cb}`,borderRadius:8,cursor:"pointer",background:$.btn,color:$.btnt,fontSize:12}}>← Load different file</button>
+</div>);}
+
+// ─── DASHBOARD ──────────────────────────────────────
+const myTm=data.teams.find(t=>t.tid===myTid);
+const mode=tab==="draft"?"draft":"roster";
+const raw=tab==="draft"?dps.filter(p=>dyf==="ALL"||p.draftYear===Number(dyf)):[];
+const disp=dSort(dFilt(raw));
+
+return(<div style={{padding:"16px 12px",maxWidth:740,margin:"0 auto"}}>
+<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+<div><h1 style={{...H,fontSize:18,margin:0,letterSpacing:1,background:"linear-gradient(135deg,#e63946,#f4a261)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><span style={{fontSize:11,color:$.t4,...M}}>Season {data.season} · {myTm?.name||`Team #${myTid}`}</span></div>
+<div style={{display:"flex",gap:5}}><ThemeBtn/><button onClick={()=>setTSel(false)} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>Switch Team</button><button onClick={()=>{setData(null);setTSel(false);}} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>New File</button></div></div>
+
+<div style={{display:"flex",gap:0,marginBottom:10,background:$.tab,borderRadius:8,overflow:"hidden",border:`1px solid ${$.tabb}`}}>
+{TABS.map(tb=><button key={tb.id} onClick={()=>cTab(tb.id)} style={{flex:1,padding:"9px 2px",border:"none",cursor:"pointer",fontSize:12,fontWeight:tab===tb.id?700:500,fontFamily:"'DM Sans',sans-serif",background:tab===tb.id?$.acc:"transparent",color:tab===tb.id?"#e63946":$.tabi,borderBottom:tab===tb.id?"2px solid #e63946":"2px solid transparent"}}>{tb.label}{tb.id==="depth"&&expP.length>0&&<span style={{fontSize:9,marginLeft:2,color:"#e74c3c"}}>⚠{expP.length}</span>}</button>)}</div>
+
+{tab==="draft"&&draftTracker&&<>
+<div style={{display:"grid",gridTemplateColumns:draftTracker.myDraftPicks.length>0?"1fr 1fr 1fr":"1fr 1fr",gap:12,marginBottom:12}}>
+<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:$.t8,marginBottom:8}}>{draftTracker.pickSource==="lottery"?"🎯 Your Pick":"📍 Estimated Pick"}</div>
+<div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:8}}>
+<span style={{...H,fontSize:36,color:"#e63946"}}>#{draftTracker.myPick}</span>
+<span style={{fontSize:12,color:$.t5}}>{draftTracker.myRecord?.won}-{draftTracker.myRecord?.lost}</span>
+</div>
+<div style={{fontSize:10,color:$.t4,lineHeight:1.5}}>{draftTracker.pickSource==="lottery"?"Confirmed pick after draft lottery.":"Based on current W-L. Actual pick depends on playoffs & tiebreakers."}</div>
+{dps.length>0&&draftTracker.myPick>0&&(()=>{const nearPicks=dps.filter(p=>p.draftYear===dY[0]&&Math.abs(p.draftRank-draftTracker.myPick)<=2).sort((a,b)=>a.draftRank-b.draftRank);
+return nearPicks.length>0&&<div style={{marginTop:8}}>
+<div style={{fontSize:10,color:$.t5,fontWeight:600,marginBottom:4}}>Prospects around #{draftTracker.myPick}:</div>
+{nearPicks.map(p=><div key={p.pid} onClick={()=>setSelP(p)} style={{display:"flex",alignItems:"center",gap:4,padding:"3px 0",cursor:"pointer",fontSize:11}}>
+<span style={{...M,fontWeight:700,color:p.draftRank===draftTracker.myPick?"#e63946":$.t4}}>#{p.draftRank}</span>
+<span style={{color:$.t,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos]}}>{p.pos}</span>
+<span style={{...M,fontSize:10,color:$.t0}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,color:p.potGap>=15?"#2ecc71":p.potGap>=8?"#f1c40f":$.t4}}>{p.pot}</span>
+</div>)}
+</div>;})()}
+</div>
+
+{draftTracker.myDraftPicks.length>0&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#2ecc71",marginBottom:8}}>🎯 Your Picks</div>
+{draftTracker.pickYears.map(yr=><div key={yr} style={{marginBottom:6}}>
+<div style={{fontSize:11,fontWeight:700,color:$.t5,...M,marginBottom:3}}>{yr}</div>
+<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+{draftTracker.myDraftPicks.filter(p=>p.season===yr).map((p,i)=><span key={i} style={{...M,fontSize:10,padding:"3px 7px",borderRadius:4,
+background:p.isAcquired?"rgba(46,204,113,0.15)":$.row,border:`1px solid ${p.isAcquired?"rgba(46,204,113,0.3)":$.cb}`,
+color:p.isAcquired?"#2ecc71":$.t6}}>
+R{p.round}{p.isAcquired?` (${p.fromTeam})`:""}
+</span>)}
+</div>
+</div>)}
+{draftTracker.tradedAway.length>0&&<div style={{marginTop:8}}>
+<div style={{fontSize:11,fontWeight:700,color:"#e74c3c",marginBottom:4}}>Traded Away:</div>
+<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+{draftTracker.tradedAway.map((p,i)=><span key={i} style={{...M,fontSize:10,padding:"3px 7px",borderRadius:4,
+background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",color:"#e74c3c",textDecoration:"line-through"}}>
+{p.season} R{p.round} →{p.toTeam}
+</span>)}
+</div>
+</div>}
+</div>}
+
+<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:$.t8,marginBottom:8}}>📊 Draft Hit Rate<Tip text="Grades your past draft picks. A = reached ≥90% of draft potential. B = ≥75%. C = ≥60%. D/F = below. Based on last 4 draft classes."/></div>
+{(()=>{const recent=draftTracker.history.filter(h=>h.year>=draftTracker.history[0]?.year-3);
+if(!recent.length)return <div style={{fontSize:12,color:$.t4,padding:"8px 0"}}>No draft history yet — grades appear after your first draft.</div>;
+const grades={A:0,B:0,C:0,DF:0};recent.forEach(h=>{if(h.grade.startsWith("A"))grades.A++;else if(h.grade==="B")grades.B++;else if(h.grade==="C")grades.C++;else grades.DF++;});
+const total=recent.length||1;
+return<>
+<div style={{display:"flex",gap:6,marginBottom:10}}>
+{[{l:"Hit (A)",c:"#2ecc71",v:grades.A},{l:"Solid (B)",c:"#f1c40f",v:grades.B},{l:"Meh (C)",c:"#e67e22",v:grades.C},{l:"Miss (D/F)",c:"#e74c3c",v:grades.DF}].map(g=>
+<div key={g.l} style={{flex:1,textAlign:"center",padding:"6px 2px",borderRadius:6,background:$.row,border:`1px solid ${$.cb}`}}>
+<div style={{...M,fontSize:16,fontWeight:800,color:g.c}}>{g.v}</div>
+<div style={{fontSize:9,color:$.t4}}>{g.l}</div>
+</div>)}
+</div>
+<div style={{fontSize:10,color:$.t4}}>Last 4 draft classes · Grade = current OVR vs. draft potential</div>
+</>;})()}
+</div>
+</div>
+{/* Draft History by Year */}
+<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:$.t8,marginBottom:8}}>📜 Draft History</div>
+{draftTracker.years.length===0&&<div style={{fontSize:12,color:$.t4,padding:"8px 0"}}>No picks made yet — history appears after your first draft.</div>}
+{draftTracker.years.map(yr=><div key={yr} style={{marginBottom:10}}>
+<div style={{fontSize:12,fontWeight:700,color:$.t6,marginBottom:4,...M}}>{yr}</div>
+{draftTracker.history.filter(h=>h.year===yr).map(h=><div key={h.pid||h.name+h.round} style={{display:"grid",gridTemplateColumns:"50px minmax(90px,1fr) 32px 64px 62px 32px 28px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,
+background:!h.onTeam?"rgba(231,76,60,0.05)":"transparent",borderRadius:4}}>
+<span style={{...M,fontSize:10,color:$.t4}}>R{h.round}P{h.pick}</span>
+<span onClick={()=>{const fp=data.players.find(p=>p.pid===h.pid);if(fp)setSelP(fp);}} style={{color:h.onTeam?$.t:$.t5,fontWeight:h.onTeam?600:400,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}{!h.onTeam&&<span style={{fontSize:8,color:"#e74c3c",marginLeft:3}}>gone</span>}</span>
+<span style={{...M,fontSize:9,color:PC[h.pos]}}>{h.pos}</span>
+<span style={{...M,fontSize:10,color:$.t4}}>D:{h.dOvr}/{h.dPot}</span>
+<span style={{...M,fontSize:10}}>→ <span style={{color:$.t0,fontWeight:700}}>{h.curOvr}</span><span style={{color:h.curPot>h.curOvr?"#2ecc71":$.t3}}>/{h.curPot}</span></span>
+<span style={{...M,fontSize:10,color:h.dev>0?"#2ecc71":h.dev===0?$.t4:"#e74c3c"}}>{h.dev>0?"+":""}{h.dev}</span>
+<span style={{...H,fontSize:12,color:h.gradeColor}}>{h.grade}</span>
+</div>)}
+</div>)}
+</div>
+{/* Mock Draft */}
+<div style={cs}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={{fontSize:14,fontWeight:700,color:$.t8}}>🏈 Mock Draft Simulator<Tip text="Simulates all rounds using the exact AI algorithm from the game source code. Each CPU team picks the prospect that maximizes their team OVR. ~85-90% accuracy for top picks, less for later rounds."/></div>
+<button onClick={()=>{const yr=dY.length>0?dY[0]:data.season;setMockRes(runMock(data,yr,myTid));}} style={{background:"linear-gradient(135deg,#e63946,#c0392b)",border:"none",borderRadius:6,color:"#fff",padding:"6px 14px",fontSize:11,fontWeight:700,cursor:"pointer",letterSpacing:0.5}}>
+{mockRes?"↻ Re-Run":"▶ Run Mock Draft"}
+</button>
+</div>
+<p style={{fontSize:10,color:$.t4,margin:"0 0 8px",lineHeight:1.5}}>Simulates all rounds using the game's AI algorithm: each CPU team picks the prospect that improves their team OVR the most. Your picks are highlighted.</p>
+{mockRes&&<div>
+{mockRes.map((r,idx)=><React.Fragment key={r.pick}>
+{(idx===0||r.round!==mockRes[idx-1].round)&&<div style={{padding:"6px 0 3px",fontSize:12,fontWeight:700,color:$.t6,borderTop:idx>0?`1px solid ${$.cb}`:"none",marginTop:idx>0?6:0,...M}}>Round {r.round}</div>}
+<div style={{display:"grid",gridTemplateColumns:"28px 50px minmax(100px,1fr) 38px 32px 36px 36px",alignItems:"center",gap:4,padding:"5px 6px",borderRadius:5,fontSize:12,
+background:r.isMyPick?"rgba(230,57,70,0.12)":r.pick%2===0?$.row:"transparent",borderLeft:r.isMyPick?"2px solid #e63946":"2px solid transparent"}}>
+<span style={{...M,fontSize:11,fontWeight:700,color:r.isMyPick?"#e63946":$.t4}}>#{r.pick}</span>
+<span style={{fontSize:11,color:$.t5}}>{r.abbrev}{r.fromAbbrev&&<span style={{fontSize:8,color:$.t3}}> via {r.fromAbbrev}</span>}</span>
+<span onClick={()=>{const fp=data.players.find(p=>p.pid===r.player.pid);if(fp)setSelP(fp);}} style={{fontWeight:r.isMyPick?700:600,color:r.isMyPick?"#e63946":$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.player.name}</span>
+<span style={{textAlign:"center"}}>{r.fillsNeed?<span style={{...M,fontSize:8,padding:"1px 4px",borderRadius:3,background:"rgba(46,204,113,0.15)",color:"#2ecc71",border:"1px solid rgba(46,204,113,0.3)"}}>NEED</span>:null}</span>
+<span style={{...M,fontSize:10,fontWeight:700,color:PC[r.player.pos]}}>{r.player.pos}</span>
+<span style={{...M,fontSize:11,fontWeight:700,color:$.t0,textAlign:"center"}}>{r.player.ovr}</span>
+<span style={{...M,fontSize:11,color:r.player.potGap>=15?"#2ecc71":r.player.potGap>=8?"#f1c40f":$.t4,textAlign:"center"}}>{r.player.pot}</span>
+</div></React.Fragment>)}
+</div>}
+</div>
+</>}
+
+{tab==="draft"&&<div style={cs}>
+{tab==="draft"&&dY.length>0&&<div style={{display:"flex",gap:4,marginBottom:8}}>
+<span style={{fontSize:11,color:$.t4,lineHeight:"24px",marginRight:3,...M}}>Class:</span>
+{["ALL",...dY.map(String)].map(y=><button key={y} onClick={()=>setDyf(y)} style={{padding:"4px 10px",border:"none",borderRadius:5,cursor:"pointer",fontSize:12,...M,fontWeight:dyf===y?700:400,background:dyf===y?$.acc2:$.fil,color:dyf===y?"#e63946":$.filt}}>{y==="ALL"?"All":y}</button>)}</div>}
+<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:8}}>{["ALL","OFF","DEF","ST",...PP].map(f=><button key={f} onClick={()=>setPf(f)} style={{padding:"4px 8px",border:"none",borderRadius:4,cursor:"pointer",fontSize:11,fontFamily:PP.includes(f)?"'JetBrains Mono',monospace":"'DM Sans',sans-serif",fontWeight:pf===f?700:400,background:pf===f?(PC[f]||$.acc2):$.fil,color:pf===f?"#fff":$.filt}}>{f}</button>)}</div>
+{tab==="draft"&&myP.length>0&&<div style={{marginBottom:8,padding:"8px 10px",background:$.comp,borderRadius:6,border:`1px solid ${$.compb}`}}>
+<div style={{fontSize:10,color:$.t5,marginBottom:5,fontWeight:600,letterSpacing:0.5}}>ROSTER COMPOSITION</div>
+<div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:"4px 10px"}}>{PP.map(pos=>{const have=myP.filter(p=>p.pos===pos).length;const need=PSC[pos];const sh=have<need;const ov=have>need;const g=pGr[pos];const diff=g?.diff||0;
+return <div key={pos} style={{display:"flex",alignItems:"center",gap:4}}><span style={{...M,fontSize:11,color:sh?"#e74c3c":ov?"#2ecc71":$.t5}}><span style={{color:PC[pos],fontWeight:700}}>{pos}</span> {have}/{need}</span><span style={{...H,fontSize:11,color:g?.c||"#888"}}>{g?.g||"–"}</span><span style={{...M,fontSize:9,color:diff>0?"#2ecc71":diff<0?"#e74c3c":$.t2}}>{diff>0?"+":""}{diff}</span></div>;})}</div></div>}
+{tab==="draft"&&nR.length>0&&<div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
+<span style={{fontSize:10,color:$.t3,lineHeight:"20px"}}>Need:</span>
+{nR.filter(n=>n.shortage>0||n.g==="F"||n.g==="D"||n.g==="C"||n.g==="C+").slice(0,5).map(n=><span key={n.pos} style={{...M,fontSize:10,padding:"2px 6px",borderRadius:3,background:`${PC[n.pos]}20`,color:PC[n.pos],border:`1px solid ${PC[n.pos]}30`}}>{n.pos} {n.g}{n.shortage>0?` -${n.shortage}`:""}</span>)}</div>}
+<div style={{display:"grid",gridTemplateColumns:GR[mode],gap:4,padding:"0 7px",marginBottom:3}}>
+<SH label="Name" sk="name"/><SH label="Pos" sk="pos" align="center"/><SH label="Age" sk="age" align="center"/>
+{mode==="draft"?<SH label="Rank" sk="draftRank" align="center"/>:<SH label="Ph." sk="age" align="center"/>}
+<SH label="OVR" sk="ovr" align="center"/><SH label="Pot" sk="pot" align="center"/>
+{mode==="roster"&&<SH label="Salary" sk="salary" align="right"/>}{mode==="roster"&&<SH label="Yrs" sk="yrsLeft" align="center"/>}
+{mode==="fa"&&<SH label="Salary" sk="salary" align="right"/>}{mode==="draft"&&<SH label="Gap" sk="potGap" align="center"/>}</div>
+{disp.slice(0,80).map((p,i)=><PR key={p.pid} p={p} i={i} mode={mode} isNeed={tab==="draft"&&nPS.has(p.pos)}/>)}
+{disp.length>80&&<div style={{padding:6,textAlign:"center",fontSize:11,color:$.t3}}>+ {disp.length-80} more (use filters)</div>}
+{disp.length===0&&<div style={{padding:16,textAlign:"center",color:$.t4,fontSize:12}}>No players found</div>}
+<div style={{marginTop:4,fontSize:10,color:$.t1,textAlign:"right",...M}}>{disp.length} players</div>
+</div>}
+
+{tab==="depth"&&<>
+{[{label:"OFFENSE",positions:["QB","RB","WR","TE","OL"]},{label:"DEFENSE",positions:["DL","LB","CB","S"]},{label:"SPECIAL TEAMS",positions:["K","P"]}].map(group=>
+<div key={group.label} style={{marginBottom:16}}>
+<div style={{fontSize:11,fontWeight:700,color:$.t4,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>{group.label}</div>
+{group.positions.map(pos=>{
+const ppRaw=myP.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);
+const sc=(TPW[pos]||[1]).length;
+const starterPids=new Set(ppRaw.slice(0,sc).map(p=>p.pid));
+const ps=posSort[pos]||{key:"ovr",dir:"desc"};
+const pp=[...ppRaw].sort((a,b)=>{const k=ps.key,d=ps.dir;if(k==="name")return d==="asc"?a.name.localeCompare(b.name):b.name.localeCompare(a.name);const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
+const g=pGr[pos];const gradeColor=g?.c||"#888";
+const need=PSC[pos]-ppRaw.length;const diff=g?.diff||0;
+const PSH=({label,sk,align})=>{const a=ps.key===sk;return <span onClick={()=>setPosSort(s=>({...s,[pos]:{key:sk,dir:s[pos]?.key===sk&&s[pos]?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:11,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(ps.dir==="asc"?" ↑":" ↓"):""}</span>;};
+return <div key={pos} style={{...cs,padding:0,overflow:"hidden",marginBottom:8}}>
+<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:`${PC[pos]}10`,borderBottom:`1px solid ${$.cb}`}}>
+<span style={{...H,fontSize:18,color:gradeColor}}>{g?.g||"–"}</span>
+<span style={{...M,fontWeight:700,fontSize:14,color:PC[pos]}}>{pos}</span>
+<span style={{fontSize:12,color:$.t5}}>{PL[pos]}</span>
+<span style={{fontSize:11,color:need>0?"#e74c3c":$.t4,...M}}>{ppRaw.length}/{PSC[pos]}{need>0?` (-${need})`:""}</span>
+<div style={{flex:1}}/>
+<span style={{...M,fontSize:11,color:$.t6}}>ø{g?.avgOvr||0}</span>
+<span style={{...M,fontSize:10,fontWeight:700,color:diff>0?"#2ecc71":diff<0?"#e74c3c":$.t4,background:diff>0?$.dp:diff<0?$.dn:"transparent",padding:"1px 5px",borderRadius:3}}>{diff>0?"+":""}{diff} vs lg</span>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"20px minmax(100px,1fr) 36px 36px 28px 56px 32px",gap:4,padding:"4px 12px"}}>
+<span></span><PSH label="Name" sk="name"/><PSH label="OVR" sk="ovr" align="center"/><PSH label="Pot" sk="pot" align="center"/><PSH label="Age" sk="age" align="center"/><PSH label="Salary" sk="salary" align="right"/><PSH label="Yrs" sk="yrsLeft" align="center"/>
+</div>
+{pp.map((p,i)=>{const isS=starterPids.has(p.pid);return <div key={p.pid} onClick={()=>setSelP(p)} style={{display:"grid",gridTemplateColumns:"20px minmax(100px,1fr) 36px 36px 28px 56px 32px",alignItems:"center",gap:4,padding:"4px 12px",fontSize:12,cursor:"pointer",
+background:isS?`${PC[pos]}08`:i%2===0?$.row:"transparent",borderLeft:isS?`3px solid ${PC[pos]}`:"3px solid transparent"}}>
+<span style={{fontSize:9,color:isS?PC[pos]:$.t3,...M}}>{isS?"ST":"BU"}</span>
+<span style={{fontWeight:isS?600:400,color:isS?$.t:$.t5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontWeight:700,color:p.ovr>=70?"#2ecc71":p.ovr>=55?$.t0:p.ovr>=45?"#e67e22":"#e74c3c",textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,color:p.potGap>=15?"#2ecc71":p.potGap>=8?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{color:$.t6,textAlign:"center",fontSize:11}}>{p.age}</span>
+<span style={{...M,fontSize:10,color:p.expiring?"#e74c3c":$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
+<span style={{...M,fontSize:10,color:p.expiring?"#e74c3c":p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?`${p.yrsLeft}y`:p.expYear?"exp":"–"}</span>
+</div>;})}
+{need>0&&<div style={{padding:"6px 12px",fontSize:10,color:"#e74c3c",fontStyle:"italic",background:"rgba(231,76,60,0.05)"}}>+{need} roster spot{need>1?"s":""} needed</div>}
+{pp.length===0&&<div style={{padding:"10px 12px",fontSize:11,color:"#e74c3c"}}>No players at this position!</div>}
+</div>;})}
+</div>)}
+</>}
+
+{tab==="grades"&&<>
+<div style={cs}><div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:10}}>Position Groups vs. League Average<Tip text="Each position group's starter OVR compared to the league average. Grade A+ (≥75) to F (<45). Diff shows how much above/below league avg."/></div>
+<div style={{display:"flex",flexDirection:"column",gap:5}}>{[...nR].sort((a,b)=>b.tw-a.tw).map(n=><div key={n.pos} style={{display:"grid",gridTemplateColumns:"40px 34px 82px 1fr 108px",alignItems:"center",gap:5,padding:"5px",borderRadius:6,background:n.g==="F"||n.g==="D"||n.shortage>0?$.gbad:n.g==="A+"||n.g==="A"?$.ggood:"transparent"}}>
+<span style={{...H,fontSize:20,color:n.c,textAlign:"center"}}>{n.g}</span>
+<span style={{...M,fontWeight:700,fontSize:12,color:PC[n.pos],textAlign:"center"}}>{n.pos}</span>
+<span style={{fontSize:11,color:n.shortage>0?"#e74c3c":$.t6}}>{n.count}/{PSC[n.pos]}{n.shortage>0?` (-${n.shortage})`:""}</span>
+<div style={{width:"100%",height:13,background:$.bar,borderRadius:3,overflow:"hidden"}}><div style={{width:`${n.avgOvr}%`,height:"100%",background:`linear-gradient(90deg,${n.c}bb,${n.c})`,borderRadius:3}}/></div>
+<div style={{display:"flex",gap:3,alignItems:"center",justifyContent:"flex-end",...M,fontSize:11}}><span style={{fontWeight:700,color:n.c}}>{n.avgOvr}</span><span style={{color:$.t2}}>vs</span><span style={{color:$.t6}}>{n.la}</span>
+<span style={{fontWeight:700,fontSize:10,color:n.diff>5?"#2ecc71":n.diff>0?"#66bb6a":n.diff>-5?"#e67e22":"#e74c3c",background:n.diff>0?$.dp:$.dn,padding:"1px 5px",borderRadius:3}}>{n.diff>0?"+":""}{n.diff}</span></div>
+</div>)}</div></div>
+<div style={cs}><div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:6}}>Priority Ranking (Team Need)<Tip text="Positions ranked by how much improving them helps your team. Factors: how far below league avg × position importance for team OVR × roster shortages. Higher score = more urgent."/></div>
+<p style={{fontSize:10,color:$.t4,margin:"0 0 8px"}}>Low grade × high team OVR weight × roster shortages = highest need</p>
+{nR.slice(0,5).map((n,i)=><div key={n.pos} style={{display:"flex",alignItems:"center",gap:7,padding:"4px 0"}}>
+<span style={{...H,fontSize:15,color:$.t2,width:18}}>#{i+1}</span><span style={{...M,fontWeight:700,color:PC[n.pos],width:26}}>{n.pos}</span><span style={{...H,fontSize:20,color:n.c}}>{n.g}</span>
+<span style={{fontSize:12,color:$.t4,flex:1}}>{PL[n.pos]} · ø{n.avgOvr} <span style={{color:n.diff>=0?"#2ecc71":"#e74c3c"}}>({n.diff>=0?"+":""}{n.diff})</span>{n.shortage>0&&<span style={{color:"#e74c3c"}}> · -{n.shortage}</span>}</span>
+<span style={{...M,fontSize:9,color:$.t2}}>need:{n.score.toFixed(0)}</span></div>)}</div>
+</>}
+
+{tab==="moves"&&<>
+{/* Cap Space Overview */}
+{capData&&<div style={cs}>
+<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:12}}>💰 Cap Space Overview<Tip text="Your payroll vs. salary cap. Shows cap space remaining, luxury tax threshold, and how much frees up from expiring contracts."/></div>
+{(()=>{const cap=capData.cap;const hasCap=cap.salaryCap>0;const space=hasCap?cap.salaryCap-capData.total:0;
+return <div style={{display:"grid",gridTemplateColumns:hasCap?"repeat(4, 1fr)":"repeat(2, 1fr)",gap:8,marginBottom:14}}>
+<div style={{padding:"10px",borderRadius:8,background:$.row,border:`1px solid ${$.cb}`,textAlign:"center"}}>
+<div style={{fontSize:10,color:$.t5,marginBottom:2}}>Total Payroll</div>
+<div style={{...M,fontSize:18,fontWeight:800,color:hasCap&&capData.total>cap.salaryCap?"#e74c3c":$.t0}}>{fS(capData.total)}</div>
+</div>
+{hasCap&&<div style={{padding:"10px",borderRadius:8,background:$.row,border:`1px solid ${$.cb}`,textAlign:"center"}}>
+<div style={{fontSize:10,color:$.t5,marginBottom:2}}>Salary Cap{cap.salaryCapType==="hard"?" (Hard)":cap.salaryCapType==="soft"?" (Soft)":""}</div>
+<div style={{...M,fontSize:18,fontWeight:800,color:$.t6}}>{fS(cap.salaryCap)}</div>
+</div>}
+{hasCap&&<div style={{padding:"10px",borderRadius:8,background:$.row,border:`1px solid ${$.cb}`,textAlign:"center"}}>
+<div style={{fontSize:10,color:$.t5,marginBottom:2}}>Cap Space</div>
+<div style={{...M,fontSize:18,fontWeight:800,color:space>0?"#2ecc71":"#e74c3c"}}>{space>0?"+":""}{fS(space)}</div>
+</div>}
+<div style={{padding:"10px",borderRadius:8,background:$.row,border:`1px solid ${$.cb}`,textAlign:"center"}}>
+<div style={{fontSize:10,color:$.t5,marginBottom:2}}>After Expiring</div>
+<div style={{...M,fontSize:18,fontWeight:800,color:"#2ecc71"}}>{fS(capData.total-capData.expRel)}</div>
+<div style={{fontSize:9,color:$.t4}}>{expP.length} players · {fS(capData.expRel)} freed</div>
+</div>
+</div>;})()}
+
+<div style={{fontSize:12,fontWeight:700,color:$.t6,marginBottom:6}}>Salary by Position Group</div>
+<div style={{display:"flex",flexDirection:"column",gap:3,marginBottom:8}}>
+{capData.byPos.map(bp=><div key={bp.pos} style={{display:"grid",gridTemplateColumns:"36px 1fr 60px 50px",alignItems:"center",gap:6}}>
+<span style={{...M,fontWeight:700,fontSize:11,color:PC[bp.pos]}}>{bp.pos}</span>
+<div style={{height:14,background:$.bar,borderRadius:3,overflow:"hidden"}}>
+<div style={{width:`${(bp.sum/capData.maxPosSal)*100}%`,height:"100%",background:`linear-gradient(90deg,${PC[bp.pos]}bb,${PC[bp.pos]})`,borderRadius:3}}/></div>
+<span style={{...M,fontSize:10,color:$.t,textAlign:"right"}}>{fS(bp.sum)}</span>
+<span style={{fontSize:9,color:$.t4}}>{bp.count} pl.</span>
+</div>)}
+</div>
+</div>}
+
+{capData&&<div style={{padding:"8px 12px",marginBottom:12,borderRadius:8,background:$.comp,border:`1px solid ${$.compb}`,fontSize:11,color:$.t5,lineHeight:1.6}}>
+📊 Contract analysis uses <strong style={{color:$.t7}}>projected OVR at contract end</strong> based on aging curves. Actual development varies.
+</div>}
+{capData&&capData.badContracts.length>0&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#e74c3c",marginBottom:4}}>🔒 Bad Contracts<Tip text="≥$3M salary, ≥2 years left, projected OVR in 3y below 65. Higher salary + more decline + longer term = worse."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Expensive + projected below starter level</p>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="bad" label="Name" sk="name"/><MSH sec="bad" label="Pos" sk="pos" align="center"/><MSH sec="bad" label="Age" sk="age" align="center"/><MSH sec="bad" label="OVR" sk="ovr" align="center"/><MSH sec="bad" label="→3y" sk="ovr3" align="center"/><MSH sec="bad" label="Pot" sk="pot" align="center"/><MSH sec="bad" label="Contract" sk="salary" align="right"/></div>
+{mSrt(capData.badContracts,"bad").map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,textAlign:"center",color:p.chg3>0?"#2ecc71":p.chg3>=-3?"#e67e22":"#e74c3c"}}>{p.ovr3}({p.chg3>0?"+":""}{p.chg3})</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontSize:9,color:"#e67e22",textAlign:"right"}}>{fS(p.salary)}·{p.yrsLeft}y</span>
+</div>)}
+</div>}
+{fillGap.length>0&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#2ecc71",marginBottom:4}}>🎯 Fill the Gap<Tip text="Best available free agents for your weakest positions. Only shows positions where your grade is below league average. Top 5 FAs per position, sorted by OVR."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 8px"}}>Best FAs for your weakest positions — sign to improve your grade</p>
+{fillGap.map(g=><div key={g.pos} style={{marginBottom:10}}>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,padding:"4px 6px",borderRadius:6,background:`${PC[g.pos]}10`}}>
+<span style={{...H,fontSize:14,color:g.gradeColor}}>{g.grade}</span>
+<span style={{...M,fontWeight:700,fontSize:13,color:PC[g.pos]}}>{g.pos}</span>
+<span style={{fontSize:10,color:$.t5}}>ø{g.avgOvr}</span>
+<span style={{...M,fontSize:9,padding:"1px 5px",borderRadius:3,color:g.diff>0?"#2ecc71":"#e74c3c",background:g.diff>0?"rgba(46,204,113,0.1)":"rgba(231,76,60,0.1)"}}>{g.diff>0?"+":""}{g.diff} vs lg</span>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 24px 32px 44px 28px",gap:4,padding:"0 4px",marginBottom:3,fontSize:10,color:$.t4}}>
+<span>Name</span><span style={{textAlign:"center"}}>Age</span><span style={{textAlign:"center"}}>OVR</span><span style={{textAlign:"center"}}>→3y</span><span style={{textAlign:"center"}}>Pot</span></div>
+{g.players.map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 24px 32px 44px 28px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:p.ovr>=g.avgOvr?"#2ecc71":p.ovr>=g.avgOvr-5?$.t0:"#e67e22",textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,textAlign:"center",color:chg>0?"#2ecc71":chg>=-3?"#e67e22":"#e74c3c"}}>{ovr3}({chg>0?"+":""}{chg})</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+</div>;})}
+</div>)}
+</div>}
+{capData&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#f1c40f",marginBottom:4}}>📋 Extension Watch<Tip text="Expiring soon (≤1yr) + worth keeping (OVR ≥55) + not too old (≤30)."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Expiring soon + worth keeping (OVR ≥55, age ≤30)</p>
+{capData.extWatch.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="ext" label="Name" sk="name"/><MSH sec="ext" label="Pos" sk="pos" align="center"/><MSH sec="ext" label="Age" sk="age" align="center"/><MSH sec="ext" label="OVR" sk="ovr" align="center"/><MSH sec="ext" label="→3y" sk="ovr3" align="center"/><MSH sec="ext" label="Pot" sk="pot" align="center"/><MSH sec="ext" label="Contract" sk="salary" align="right"/></div>
+{mSrt(capData.extWatch,"ext").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,textAlign:"center",color:chg>0?"#2ecc71":chg>=-3?"#e67e22":"#e74c3c"}}>{ovr3}({chg>0?"+":""}{chg})</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontSize:9,color:"#e67e22",textAlign:"right"}}>{fS(p.salary)}·{p.yrsLeft<=0?"exp":p.yrsLeft+"y"}</span>
+</div>;})}</>:<div style={{fontSize:12,color:$.t4}}>No extensions needed</div>}
+</div>}
+{capData&&capData.resignWatch&&capData.resignWatch.length>0&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#3498db",marginBottom:4}}>🔄 Re-sign Watch<Tip text="KEEP = young+upside or elite. KEY = good starter. EVAL = borderline. PASS = not worth it."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Former team players now free agents. Projection shows expected OVR in 3 years.</p>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="rsn" label="Name" sk="name"/><MSH sec="rsn" label="Pos" sk="pos" align="center"/><MSH sec="rsn" label="Age" sk="age" align="center"/><MSH sec="rsn" label="OVR" sk="ovr" align="center"/><MSH sec="rsn" label="→3y" sk="ovr3" align="center"/><MSH sec="rsn" label="Pot" sk="pot" align="center"/><span></span></div>
+{mSrt(capData.resignWatch,"rsn").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,textAlign:"center",color:chg>0?"#2ecc71":chg>=-3?"#e67e22":"#e74c3c"}}>{ovr3}({chg>0?"+":""}{chg})</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:cat.c,background:`${cat.c}18`}}>{cat.l}</span>
+</div>;})}
+</div>}
+{expP.length>0&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#e67e22",marginBottom:4}}>⚠️ Expiring Contracts ({expP.length})<Tip text="KEEP = young+upside or elite. KEY = good starter. EVAL = depends on price. PASS = let walk."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Become free agents after season. Projection shows expected OVR in 3 years.</p>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="exp" label="Name" sk="name"/><MSH sec="exp" label="Pos" sk="pos" align="center"/><MSH sec="exp" label="Age" sk="age" align="center"/><MSH sec="exp" label="OVR" sk="ovr" align="center"/><MSH sec="exp" label="→3y" sk="ovr3" align="center"/><MSH sec="exp" label="Pot" sk="pot" align="center"/><MSH sec="exp" label="Salary" sk="salary" align="right"/><span></span></div>
+{mSrt(expP,"exp").slice(0,15).map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,textAlign:"center",color:chg>0?"#2ecc71":chg>=-3?"#e67e22":"#e74c3c"}}>{ovr3}({chg>0?"+":""}{chg})</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontSize:9,color:$.t5,textAlign:"right"}}>{fS(p.salary)}</span>
+<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:cat.c,background:`${cat.c}18`}}>{cat.l}</span>
+</div>;})}
+{expP.length>15&&<div style={{fontSize:11,color:$.t3,textAlign:"center",padding:4}}>+ {expP.length-15} more</div>}
+</div>}
+<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#e74c3c",marginBottom:4}}>🔻 Sell High<Tip text="Past peak with trade value. Speed pos (RB,WR,CB,S) decline after 27, IQ pos (QB,OL) after 30, all after 32."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Speed pos age 27+ · IQ pos age 30+ · All age 32+</p>
+{tr.sell.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="sell" label="Name" sk="name"/><MSH sec="sell" label="Pos" sk="pos" align="center"/><MSH sec="sell" label="Age" sk="age" align="center"/><MSH sec="sell" label="OVR" sk="ovr" align="center"/><MSH sec="sell" label="→3y" sk="ovr3" align="center"/><MSH sec="sell" label="Pot" sk="pot" align="center"/><MSH sec="sell" label="Contract" sk="salary" align="right"/><span></span></div>
+{mSrt(tr.sell,"sell").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,textAlign:"center",color:chg>0?"#2ecc71":chg>=-3?"#e67e22":"#e74c3c"}}>{ovr3}({chg>0?"+":""}{chg})</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontSize:9,color:$.t5,textAlign:"right"}}>{fS(p.salary)}·{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
+<span style={{...M,fontSize:8,padding:"1px 3px",borderRadius:3,textAlign:"center",color:"#e74c3c",background:"rgba(231,76,60,0.12)"}}>{["RB","CB","WR","S"].includes(p.pos)?"SPD":"AGE"}</span>
+</div>;})}</>:<div style={{padding:8,color:$.t4,fontSize:12}}>No candidates 👍</div>}
+</div>
+{capData&&capData.cuts.length>0&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#e67e22",marginBottom:4}}>🔄 Trade Candidates<Tip text="OVR below position avg + ≥$2M salary. Releasing doesn't free cap in FBGM — trade to get salary off books."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Below position avg — trade to free salary</p>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 40px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="trade" label="Name" sk="name"/><MSH sec="trade" label="Pos" sk="pos" align="center"/><MSH sec="trade" label="Age" sk="age" align="center"/><MSH sec="trade" label="OVR" sk="ovr" align="center"/><MSH sec="trade" label="→3y" sk="ovr3" align="center"/><MSH sec="trade" label="Pot" sk="pot" align="center"/><MSH sec="trade" label="vs ø" sk="posAvgOvr" align="center"/><MSH sec="trade" label="Contract" sk="salary" align="right"/></div>
+{mSrt(capData.cuts,"trade").map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 40px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,textAlign:"center",color:p.chg3>0?"#2ecc71":p.chg3>=-3?"#e67e22":"#e74c3c"}}>{p.ovr3}({p.chg3>0?"+":""}{p.chg3})</span>
+<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontSize:9,color:"#e74c3c",textAlign:"center"}}>{p.ovr}/{p.posAvgOvr}</span>
+<span style={{...M,fontSize:9,color:"#e67e22",textAlign:"right"}}>{fS(p.salary)}·{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
+</div>)}
+</div>}
+{capData&&capData.vor&&capData.vor.length>0&&<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#9b59b6",marginBottom:4}}>📊 Value Over Replacement<Tip text="How much better each player is vs. the next man below them on the depth chart. High VOR = irreplaceable. Low VOR + high salary = overpaid. $/VOR = cost per point of advantage."/></div>
+<p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Each player vs. the next man below them on the depth chart, grouped by position.</p>
+{(()=>{const byPos={};capData.vor.forEach(p=>{if(!byPos[p.pos])byPos[p.pos]=[];byPos[p.pos].push(p);});
+const posOrder=[...nR].sort((a,b)=>b.tw-a.tw).map(n=>n.pos);
+return posOrder.filter(pos=>byPos[pos]&&byPos[pos].length>0).map(pos=>{
+const group=byPos[pos];const ps=mSort["vor_"+pos]||{key:"rank",dir:"asc"};
+const sorted=[...group].sort((a,b)=>{const k=ps.key,d=ps.dir;if(k==="name"||k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
+const g=pGr[pos];const gradeColor=g?.c||"#888";
+const VH=({label,sk,align})=>{const sec="vor_"+pos;const s=mSort[sec]||{key:"rank",dir:"asc"};const a=s.key===sk;return <span onClick={()=>setMSort(ms=>({...ms,[sec]:{key:sk,dir:ms[sec]?.key===sk&&ms[sec]?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:10,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
+return <div key={pos} style={{marginBottom:10}}>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,padding:"4px 6px",borderRadius:6,background:`${PC[pos]}10`}}>
+<span style={{...H,fontSize:14,color:gradeColor}}>{g?.g||"–"}</span>
+<span style={{...M,fontWeight:700,fontSize:13,color:PC[pos]}}>{pos}</span>
+<span style={{fontSize:10,color:$.t5}}>{group.length} players</span>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 22px 32px 32px 36px 48px 48px",gap:4,padding:"0 4px",marginBottom:3,fontSize:10,color:$.t4}}>
+<VH label="Name" sk="name"/><VH label="#" sk="rank" align="center"/><VH label="OVR" sk="ovr" align="center"/><VH label="Next" sk="nextOvr" align="center"/><VH label="VOR" sk="vorVal" align="center"/><VH label="Salary" sk="salary" align="right"/><VH label="$/VOR" sk="perVor" align="right"/></div>
+{sorted.map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 22px 32px 32px 36px 48px 48px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:p.rank<=((TPW[pos]||[1]).length)?700:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{p.rank}/{p.depthCount}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,color:$.t4,textAlign:"center"}}>{p.nextOvr||"—"}</span>
+<span style={{...M,fontWeight:700,textAlign:"center",color:p.vorVal>=20?"#2ecc71":p.vorVal>=10?"#f1c40f":p.vorVal>=5?"#e67e22":"#e74c3c"}}>{p.vorVal>0?"+":""}{p.vorVal}</span>
+<span style={{...M,fontSize:9,color:$.t5,textAlign:"right"}}>{fS(p.salary)}</span>
+<span style={{...M,fontSize:9,textAlign:"right",color:p.vorVal>0&&p.perVor>2000?"#e74c3c":p.vorVal>0&&p.perVor>1000?"#e67e22":"#2ecc71"}}>{p.vorVal>0?fS(p.perVor):"—"}</span>
+</div>)}
+</div>;});})()}
+</div>}
+</>}
+
+{tab==="compare"&&<>
+<div style={{display:"flex",gap:6,marginBottom:12}}>
+{["team","player"].map(m=><button key={m} onClick={()=>setCompMode(m)} style={{flex:1,padding:"8px",border:"none",cursor:"pointer",fontSize:12,fontWeight:compMode===m?700:500,fontFamily:"'DM Sans',sans-serif",background:compMode===m?$.acc:"transparent",color:compMode===m?"#e63946":$.tabi,borderBottom:compMode===m?"2px solid #e63946":"2px solid transparent",borderRadius:"6px 6px 0 0"}}>{m==="team"?"🏈 Team vs Team":"👤 Player vs Player"}</button>)}
+</div>
+
+{compMode==="team"&&<>
+<div style={{...cs,padding:"10px 14px"}}>
+<div style={{fontSize:12,color:$.t5,marginBottom:6}}>Compare vs:</div>
+<div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+{data.teams.filter(t=>t.tid!==myTid&&t.tid>=0).map(t=><button key={t.tid} onClick={()=>setCompTid(t.tid)} style={{padding:"4px 8px",fontSize:10,border:`1px solid ${compTid===t.tid?"#e63946":$.cb}`,borderRadius:5,cursor:"pointer",background:compTid===t.tid?"rgba(230,57,70,0.15)":$.btn,color:compTid===t.tid?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif",...M}}>{t.abbrev}</button>)}
+</div>
+</div>
+{compTid!==null&&(()=>{const opp=data.teams.find(t=>t.tid===compTid);const oppP=data.players.filter(p=>p.tid===compTid);
+const posOrder=[...nR].sort((a,b)=>b.tw-a.tw).map(n=>n.pos);
+let myWins=0,oppWins=0;let myTotal=0,oppTotal=0,twTotal=0;
+const rows=posOrder.map(pos=>{
+const sc=(TPW[pos]||[1]).length;const tw=(TPW[pos]||[1]).reduce((a,b)=>a+b,0);
+const myGrp=myP.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,sc);
+const oppGrp=oppP.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,sc);
+const myAvg=myGrp.length?Math.round(myGrp.reduce((s,p)=>s+p.ovr,0)/myGrp.length):0;
+const oppAvg=oppGrp.length?Math.round(oppGrp.reduce((s,p)=>s+p.ovr,0)/oppGrp.length):0;
+const diff=myAvg-oppAvg;
+myTotal+=myAvg*tw;oppTotal+=oppAvg*tw;twTotal+=tw;
+if(diff>0)myWins++;else if(diff<0)oppWins++;
+const myG=pGr[pos];
+const oppGrade=(a)=>a>=75?"A+":a>=70?"A":a>=63?"B":a>=55?"C+":a>=50?"C":a>=45?"D":"F";
+const oppG=oppGrade(oppAvg);const oppC=oppG==="A+"||oppG==="A"?"#2ecc71":oppG==="B"?"#f1c40f":oppG.startsWith("C")?"#e67e22":"#e74c3c";
+return{pos,myAvg,oppAvg,diff,myG,oppG,oppC};});
+const myOVR=twTotal>0?Math.round(myTotal/twTotal):0;const oppOVR=twTotal>0?Math.round(oppTotal/twTotal):0;const ovrDiff=myOVR-oppOVR;
+return <div style={cs}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 40px 1fr",gap:8,marginBottom:12,textAlign:"center"}}>
+<div><div style={{fontSize:14,fontWeight:700,color:$.t}}>{data.teams.find(t=>t.tid===myTid)?.name}</div><div style={{...M,fontSize:22,fontWeight:800,color:ovrDiff>=0?"#2ecc71":"#e74c3c"}}>{myOVR}</div></div>
+<div style={{fontSize:12,color:$.t4,...M,alignSelf:"center"}}>Team OVR</div>
+<div><div style={{fontSize:14,fontWeight:700,color:$.t}}>{opp?.name}</div><div style={{...M,fontSize:22,fontWeight:800,color:ovrDiff<=0?"#2ecc71":"#e74c3c"}}>{oppOVR}</div></div>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"36px 28px 36px 1fr 28px 1fr 36px 36px",gap:4,padding:"0 4px",marginBottom:6,fontSize:10,color:$.t4}}>
+<span style={{textAlign:"center"}}>Grade</span><span style={{textAlign:"center"}}>Pos</span><span style={{textAlign:"right"}}>øOVR</span><span></span><span></span><span></span><span style={{textAlign:"left"}}>øOVR</span><span style={{textAlign:"center"}}>Grade</span>
+</div>
+{rows.map(r=><div key={r.pos} style={{display:"grid",gridTemplateColumns:"36px 28px 36px 1fr 28px 1fr 36px 36px",alignItems:"center",gap:4,padding:"5px 4px",fontSize:11,background:r.diff>0?"rgba(46,204,113,0.06)":r.diff<0?"rgba(231,76,60,0.06)":"transparent",borderRadius:4}}>
+<span style={{...H,fontSize:12,color:r.myG?.c||"#888",textAlign:"center"}}>{r.myG?.g||"–"}</span>
+<span style={{...M,fontWeight:700,color:PC[r.pos],textAlign:"center"}}>{r.pos}</span>
+<span style={{...M,fontWeight:700,color:r.myG?.c||"#888",textAlign:"right"}}>{r.myAvg}</span>
+<div style={{height:10,background:$.bar,borderRadius:3,overflow:"hidden",direction:"rtl"}}><div style={{width:`${Math.min(Math.abs(r.diff)*3,100)}%`,height:"100%",background:r.diff>0?"#2ecc71":"transparent",borderRadius:3}}/></div>
+<span style={{...M,fontSize:10,fontWeight:700,textAlign:"center",color:r.diff>0?"#2ecc71":r.diff<0?"#e74c3c":$.t4}}>{r.diff>0?"+":""}{r.diff}</span>
+<div style={{height:10,background:$.bar,borderRadius:3,overflow:"hidden"}}><div style={{width:`${Math.min(Math.abs(r.diff)*3,100)}%`,height:"100%",background:r.diff<0?"#e74c3c":"transparent",borderRadius:3}}/></div>
+<span style={{...M,fontWeight:700,color:r.oppC,textAlign:"left"}}>{r.oppAvg}</span>
+<span style={{...H,fontSize:12,color:r.oppC,textAlign:"center"}}>{r.oppG}</span>
+</div>)}
+<div style={{display:"flex",justifyContent:"space-between",padding:"10px 4px 0",borderTop:`1px solid ${$.cb}`,marginTop:8,fontSize:12}}>
+<span style={{color:"#2ecc71",...M}}>✅ Advantage: {myWins} positions</span>
+<span style={{color:"#e74c3c",...M}}>❌ Disadvantage: {oppWins} positions</span>
+</div>
+</div>;})()}
+</>}
+
+{compMode==="player"&&<>
+{(()=>{
+const keyRatings={QB:["thv","thp","tha","spd","hgt"],RB:["spd","elu","bsc","hnd"],WR:["spd","hnd","rtr","hgt"],TE:["hnd","rbk","rtr","spd"],OL:["rbk","pbk","hgt","spd"],DL:["prs","rns","spd","hgt"],LB:["tck","pcv","spd","prs"],CB:["pcv","spd","hgt"],S:["pcv","tck","spd"],K:["kpw","kac"],P:["ppw","pac"]};
+const RN={hgt:"Height",spd:"Speed",endu:"Endurance",thv:"Throw Vis",thp:"Throw Pow",tha:"Throw Acc",bsc:"Ball Sec",elu:"Elusiveness",rtr:"Route Run",hnd:"Hands",rbk:"Run Block",pbk:"Pass Block",pcv:"Coverage",tck:"Tackling",prs:"Pass Rush",rns:"Run Stop",kpw:"Kick Pow",kac:"Kick Acc",ppw:"Punt Pow",pac:"Punt Acc",ovrDef:"Ovr Def"};
+const allP=data?data.players:[];
+const filt=(s)=>s.length<2?[]:allP.filter(p=>p.name.toLowerCase().includes(s.toLowerCase())).sort((a,b)=>b.ovr-a.ovr).slice(0,12);
+const list1=filt(compS1);const list2=filt(compS2);
+return <>
+<div style={{...cs,display:"flex",gap:12}}>
+<div style={{flex:1}}>
+<div style={{fontSize:11,color:$.t5,marginBottom:4}}>Player 1</div>
+<input value={compS1} onChange={e=>{setCompS1(e.target.value);if(!e.target.value)setCompP1(null);}} placeholder="Type player name..." style={{width:"100%",padding:"6px 8px",fontSize:12,background:$.row,border:`1px solid ${$.cb}`,borderRadius:6,color:$.t,fontFamily:"'DM Sans',sans-serif",outline:"none"}}/>
+{compS1.length>=2&&!compP1&&<div style={{maxHeight:180,overflowY:"auto",background:$.card,border:`1px solid ${$.cb}`,borderRadius:6,marginTop:2}}>
+{list1.map(p=><div key={p.pid} onClick={()=>{setCompP1(p);setCompS1(p.name);}} style={{padding:"4px 8px",cursor:"pointer",fontSize:11,display:"flex",gap:6,alignItems:"center",borderBottom:`1px solid ${$.cb}`}}>
+<span style={{color:$.t,fontWeight:600,flex:1}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos]}}>{p.pos}</span>
+<span style={{...M,fontSize:10,color:$.t0}}>{p.ovr}</span>
+<span style={{fontSize:9,color:$.t4}}>{p.age}y</span>
+<span style={{fontSize:9,color:p.tid>=0?$.t4:"#e67e22"}}>{p.tid>=0?(data.teams.find(t=>t.tid===p.tid)?.abbrev||"?"):"FA"}</span>
+</div>)}
+{list1.length===0&&<div style={{padding:8,fontSize:11,color:$.t4}}>No matches</div>}
+</div>}
+</div>
+<div style={{flex:1}}>
+<div style={{fontSize:11,color:$.t5,marginBottom:4}}>Player 2</div>
+<input value={compS2} onChange={e=>{setCompS2(e.target.value);if(!e.target.value)setCompP2(null);}} placeholder="Type player name..." style={{width:"100%",padding:"6px 8px",fontSize:12,background:$.row,border:`1px solid ${$.cb}`,borderRadius:6,color:$.t,fontFamily:"'DM Sans',sans-serif",outline:"none"}}/>
+{compS2.length>=2&&!compP2&&<div style={{maxHeight:180,overflowY:"auto",background:$.card,border:`1px solid ${$.cb}`,borderRadius:6,marginTop:2}}>
+{list2.map(p=><div key={p.pid} onClick={()=>{setCompP2(p);setCompS2(p.name);}} style={{padding:"4px 8px",cursor:"pointer",fontSize:11,display:"flex",gap:6,alignItems:"center",borderBottom:`1px solid ${$.cb}`}}>
+<span style={{color:$.t,fontWeight:600,flex:1}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos]}}>{p.pos}</span>
+<span style={{...M,fontSize:10,color:$.t0}}>{p.ovr}</span>
+<span style={{fontSize:9,color:$.t4}}>{p.age}y</span>
+<span style={{fontSize:9,color:p.tid>=0?$.t4:"#e67e22"}}>{p.tid>=0?(data.teams.find(t=>t.tid===p.tid)?.abbrev||"?"):"FA"}</span>
+</div>)}
+{list2.length===0&&<div style={{padding:8,fontSize:11,color:$.t4}}>No matches</div>}
+</div>}
+</div>
+</div>
+{compP1&&compP2&&(()=>{
+const p1=compP1,p2=compP2;
+const proj1=projectRatings(p1.rt,p1.age,3);const ovr1_3=proj1[2]?.ovr||p1.ovr;
+const proj2=projectRatings(p2.rt,p2.age,3);const ovr2_3=proj2[2]?.ovr||p2.ovr;
+const pos=p1.pos;const keys=[...new Set([...(keyRatings[p1.pos]||[]),...(keyRatings[p2.pos]||[])])];
+const t1=p1.tid>=0?data.teams.find(t=>t.tid===p1.tid):null;
+const t2=p2.tid>=0?data.teams.find(t=>t.tid===p2.tid):null;
+return <div style={cs}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 40px 1fr",gap:8,marginBottom:14,textAlign:"center"}}>
+<div><div style={{fontSize:14,fontWeight:700,color:$.t}}>{p1.name}</div><div style={{fontSize:11,color:$.t5}}>{p1.pos} · Age {p1.age} · {t1?t1.abbrev:"FA"} · {fS(p1.salary)}</div></div>
+<div style={{fontSize:12,color:$.t4,...M,alignSelf:"center"}}>vs</div>
+<div><div style={{fontSize:14,fontWeight:700,color:$.t}}>{p2.name}</div><div style={{fontSize:11,color:$.t5}}>{p2.pos} · Age {p2.age} · {t2?t2.abbrev:"FA"} · {fS(p2.salary)}</div></div>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 60px 1fr",gap:4,marginBottom:12}}>
+{[{l:"OVR",v1:p1.ovr,v2:p2.ovr},{l:"Pot",v1:p1.pot,v2:p2.pot},{l:"→3y",v1:ovr1_3,v2:ovr2_3}].map(s=>{
+const d=s.v1-s.v2;return <React.Fragment key={s.l}>
+<div style={{textAlign:"right",padding:"3px 6px"}}><span style={{...M,fontSize:16,fontWeight:700,color:d>0?"#2ecc71":d<0?"#e74c3c":$.t0}}>{s.v1}</span></div>
+<div style={{textAlign:"center",padding:"3px 0",fontSize:10,color:$.t4,...M}}>{s.l}</div>
+<div style={{textAlign:"left",padding:"3px 6px"}}><span style={{...M,fontSize:16,fontWeight:700,color:d<0?"#2ecc71":d>0?"#e74c3c":$.t0}}>{s.v2}</span></div>
+</React.Fragment>;})}
+</div>
+<div style={{fontSize:11,fontWeight:700,color:$.t6,marginBottom:6}}>Ratings</div>
+{RK.map(k=>{const v1=p1.rt[k]||0,v2=p2.rt[k]||0;const d=v1-v2;const isKey=keys.includes(k);
+return <div key={k} style={{display:"grid",gridTemplateColumns:"32px 1fr 60px 1fr 32px",alignItems:"center",gap:4,padding:"2px 4px",borderRadius:4,
+background:isKey?"rgba(230,57,70,0.06)":"transparent",borderLeft:isKey?"2px solid #e63946":"2px solid transparent"}}>
+<span style={{...M,fontSize:11,fontWeight:700,color:d>0?"#2ecc71":d<0?"#e74c3c":$.t0,textAlign:"right"}}>{v1}</span>
+<div style={{height:8,borderRadius:3,overflow:"hidden",direction:"rtl",background:$.bar}}><div style={{width:`${v1}%`,height:"100%",background:d>0?"#2ecc71":d===0?$.t4:"#e67e22",borderRadius:3}}/></div>
+<span style={{textAlign:"center",fontSize:10,color:isKey?$.t:$.t4,...M}}>{RN[k]||k}</span>
+<div style={{height:8,borderRadius:3,overflow:"hidden",background:$.bar}}><div style={{width:`${v2}%`,height:"100%",background:d<0?"#2ecc71":d===0?$.t4:"#e67e22",borderRadius:3}}/></div>
+<span style={{...M,fontSize:11,fontWeight:700,color:d<0?"#2ecc71":d>0?"#e74c3c":$.t0,textAlign:"left"}}>{v2}</span>
+</div>;})}
+<div style={{fontSize:9,color:$.t3,marginTop:8}}>Highlighted = key ratings for {p1.pos}{p2.pos!==p1.pos?` / ${p2.pos}`:""}</div>
+</div>;})()}
+</>;})()}
+</>}
+</>}
+
+{tab==="aging"&&<>
+{/* Disclaimer */}
+<div style={{padding:"8px 12px",marginBottom:12,borderRadius:8,background:$.comp,border:`1px solid ${$.compb}`,fontSize:11,color:$.t5,lineHeight:1.6}}>
+📊 <strong style={{color:$.t7}}>Projections based on aging curves from game source code.</strong> Actual development includes random variance — these show the <em>expected</em> trajectory without luck. Young players may develop faster or slower, veterans may hold up better or worse than projected.
+</div>
+
+{/* Age Distribution */}
+<div style={cs}>
+<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:10}}>Age Distribution<Tip text="How many players are in each career phase. Dev (≤22) = developing. Rise (23-25) = improving. Prime (26-29) = peak years. Declining = past peak. A young roster has more future upside."/></div>
+<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+{[{l:"Dev",e:"🌱",c:"#2ecc71",d:"≤22"},{l:"Rise",e:"📈",c:"#3498db",d:"23-25"},{l:"Prime",e:"⭐",c:"#f1c40f",d:"26-27"},{l:"Late P.",e:"⭐",c:"#f1c40f",d:"28-29"},{l:"Decl.",e:"⚠️",c:"#e67e22",d:"varies"},{l:"Vet",e:"🔶",c:"#e67e22",d:"28-31"},{l:"Done",e:"❌",c:"#c0392b",d:"32+"}].map(ph=>{
+const count=agingData.ageDist.find(a=>a.label===ph.l.replace(".",""))?.count||0;
+if(!count)return null;
+return <div key={ph.l} style={{padding:"8px 12px",borderRadius:8,background:$.row,border:`1px solid ${$.cb}`,textAlign:"center",minWidth:70}}>
+<div style={{fontSize:16,marginBottom:2}}>{ph.e}</div>
+<div style={{...M,fontSize:18,fontWeight:800,color:ph.c}}>{count}</div>
+<div style={{fontSize:10,color:$.t5,fontWeight:600}}>{ph.l}</div>
+<div style={{fontSize:9,color:$.t3}}>{ph.d}</div>
+</div>;})}
+</div>
+</div>
+
+{/* Risk & Opportunity */}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#e74c3c",marginBottom:6}}>🔻 Biggest Drops (3y)</div>
+{agingData.drops.length>0?agingData.drops.map((p,i)=><div key={p.pid} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 0",fontSize:12}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,flex:1,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}</span>
+<span style={{...M,fontSize:10,color:PC[p.pos]}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5}}>{p.age}</span>
+<span style={{...M,fontSize:11,color:$.t6}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,color:$.t4}}>→</span>
+<span style={{...M,fontSize:11,fontWeight:700,color:"#e74c3c"}}>{p.ovr3}</span>
+<span style={{...M,fontSize:10,color:"#e74c3c"}}>{p.chg3}</span>
+</div>):<div style={{fontSize:12,color:$.t4}}>No major drops 👍</div>}
+</div>
+<div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:"#2ecc71",marginBottom:6}}>📈 Biggest Risers (3y)</div>
+{agingData.risers.length>0?agingData.risers.map((p,i)=><div key={p.pid} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 0",fontSize:12}}>
+<span onClick={()=>setSelP(p)} style={{color:$.t,flex:1,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}</span>
+<span style={{...M,fontSize:10,color:PC[p.pos]}}>{p.pos}</span>
+<span style={{fontSize:10,color:$.t5}}>{p.age}</span>
+<span style={{...M,fontSize:11,color:$.t6}}>{p.ovr}</span>
+<span style={{...M,fontSize:10,color:$.t4}}>→</span>
+<span style={{...M,fontSize:11,fontWeight:700,color:"#2ecc71"}}>{p.ovr3}</span>
+<span style={{...M,fontSize:10,color:"#2ecc71"}}>+{p.chg3}</span>
+</div>):<div style={{fontSize:12,color:$.t4}}>No major risers</div>}
+</div>
+</div>
+
+{/* Position Group Forecast */}
+<div style={cs}>
+<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:10}}>Position Group Forecast<Tip text="Projects each position group's starter OVR over 3 seasons using aging curves from the game source code. Red = declining, green = improving. Positions sorted worst decline first."/></div>
+{(()=>{const sk=sort.key,sd=sort.dir;const sf=(a,b,k)=>sd==="asc"?a[k]-b[k]:b[k]-a[k];
+const sorted=[...agingData.posForecasts].sort((a,b)=>sk==="now"?sf(a,b,"now"):sk==="y1"?sf(a,b,"y1"):sk==="y2"?sf(a,b,"y2"):sk==="y3"?sf(a,b,"y3"):sk==="chg"?sf(a,b,"chg"):sk==="pos"?(sd==="asc"?a.pos.localeCompare(b.pos):b.pos.localeCompare(a.pos)):a.chg-b.chg);
+return <div style={{display:"flex",flexDirection:"column",gap:4}}>
+<div style={{display:"grid",gridTemplateColumns:"36px 46px 46px 46px 46px 50px",gap:4,padding:"2px 4px"}}>
+<SH label="Pos" sk="pos" align="center"/>
+<SH label="Now" sk="now" align="center"/>
+<SH label="+1y" sk="y1" align="center"/>
+<SH label="+2y" sk="y2" align="center"/>
+<SH label="+3y" sk="y3" align="center"/>
+<SH label="Δ3y" sk="chg" align="center"/>
+</div>
+{sorted.map(f=><div key={f.pos} style={{display:"grid",gridTemplateColumns:"36px 46px 46px 46px 46px 50px",alignItems:"center",gap:4,padding:"4px 4px",borderRadius:5,background:f.chg<=-3?$.gbad:f.chg>=2?$.ggood:"transparent"}}>
+<span style={{...M,fontWeight:700,fontSize:12,color:PC[f.pos],textAlign:"center"}}>{f.pos}</span>
+<span style={{...M,textAlign:"center",fontSize:13,fontWeight:700,color:$.t0}}>{f.now}</span>
+<span style={{...M,textAlign:"center",fontSize:13,color:f.y1<f.now?"#e74c3c":f.y1>f.now?"#2ecc71":$.t6}}>{f.y1}</span>
+<span style={{...M,textAlign:"center",fontSize:13,color:f.y2<f.now?"#e74c3c":f.y2>f.now?"#2ecc71":$.t6}}>{f.y2}</span>
+<span style={{...M,textAlign:"center",fontSize:13,color:f.y3<f.now?"#e74c3c":f.y3>f.now?"#2ecc71":$.t6}}>{f.y3}</span>
+<span style={{...M,textAlign:"center",fontSize:12,fontWeight:700,color:f.chg>0?"#2ecc71":f.chg>=-3?"#e67e22":"#e74c3c"}}>{f.chg>0?"+":""}{f.chg}</span>
+</div>)}
+</div>;})()}
+</div>
+
+{/* Full Roster Aging Table */}
+<div style={cs}>
+<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:10}}>Roster Aging Table<Tip text="Every player with projected OVR for +1, +2, +3 years. Based on deterministic aging curves — actual development includes random variance. Pot shows the ceiling the game uses."/></div>
+<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:8}}>{["ALL","OFF","DEF","ST",...PP].map(f=><button key={f} onClick={()=>setPf(f)} style={{padding:"4px 8px",border:"none",borderRadius:4,cursor:"pointer",fontSize:11,fontFamily:PP.includes(f)?"'JetBrains Mono',monospace":"'DM Sans',sans-serif",fontWeight:pf===f?700:400,background:pf===f?(PC[f]||$.acc2):$.fil,color:pf===f?"#fff":$.filt}}>{f}</button>)}</div>
+<div style={{display:"grid",gridTemplateColumns:"minmax(100px,1fr) 32px 28px 38px 36px 38px 38px 38px 44px",gap:4,padding:"0 4px",marginBottom:4}}>
+<SH label="Name" sk="name"/><SH label="Pos" sk="pos" align="center"/><SH label="Age" sk="age" align="center"/>
+<SH label="Now" sk="ovr" align="center"/>
+<SH label="Pot" sk="pot" align="center"/>
+<SH label="+1y" sk="ovr1" align="center"/>
+<SH label="+2y" sk="ovr2" align="center"/>
+<SH label="+3y" sk="ovr3" align="center"/>
+<SH label="Δ3y" sk="chg3" align="center"/>
+</div>
+{dFilt([...agingData.players]).sort((a,b)=>{const k=sort.key,d=sort.dir;if(k==="name")return d==="asc"?a.name.localeCompare(b.name):b.name.localeCompare(a.name);if(k==="pos")return d==="asc"?a.pos.localeCompare(b.pos):b.pos.localeCompare(a.pos);const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;}).map((p,i)=>
+<div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(100px,1fr) 32px 28px 38px 36px 38px 38px 38px 44px",alignItems:"center",gap:4,padding:"5px 4px",borderRadius:5,fontSize:12,background:p.chg3<=-5?$.gbad:p.chg3>=5?$.ggood:i%2===0?$.row:"transparent"}}>
+<span onClick={()=>setSelP(p)} style={{fontWeight:600,color:$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}</span>
+<span style={{...M,fontWeight:700,color:PC[p.pos],fontSize:10,textAlign:"center"}}>{p.pos}</span>
+<span style={{color:$.t7,textAlign:"center",fontSize:11}}>{p.age}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontWeight:600,color:p.potGap>=15?"#2ecc71":p.potGap>=8?"#f1c40f":$.t6,fontSize:11,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,textAlign:"center",color:p.ovr1<p.ovr?"#e74c3c":p.ovr1>p.ovr?"#2ecc71":$.t6}}>{p.ovr1}</span>
+<span style={{...M,textAlign:"center",color:p.ovr2<p.ovr?"#e74c3c":p.ovr2>p.ovr?"#2ecc71":$.t6}}>{p.ovr2}</span>
+<span style={{...M,textAlign:"center",color:p.ovr3<p.ovr?"#e74c3c":p.ovr3>p.ovr?"#2ecc71":$.t6}}>{p.ovr3}</span>
+<span style={{...M,textAlign:"center",fontWeight:700,fontSize:11,color:p.chg3>0?"#2ecc71":p.chg3>=-3?"#e67e22":"#e74c3c"}}>{p.chg3>0?"+":""}{p.chg3}</span>
+</div>)}
+</div>
+</>}
+
+<div style={{textAlign:"center",padding:"10px 0 4px",fontSize:9,color:$.t0b,...M}}>Formulas from zengm-games/zengm · OVR calculated exactly like in-game</div>
+{selP&&<PlayerDetail p={selP} onClose={()=>setSelP(null)}/>}
+</div>);}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
