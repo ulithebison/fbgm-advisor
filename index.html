@@ -13,8 +13,10 @@
 body{font-family:'DM Sans',sans-serif;min-height:100vh;transition:background 0.3s,color 0.3s}
 button{font-family:inherit}
 .tip{position:relative;display:inline-block;margin-left:5px;cursor:help}
-.tip .tip-pop{visibility:hidden;opacity:0;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5;width:260px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;transition:opacity 0.15s}
-.tip:hover .tip-pop{visibility:visible;opacity:1}
+.tip .tip-pop{visibility:hidden;opacity:0;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5;width:260px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,0.3);pointer-events:none;transition:opacity 0.15s 0.05s}
+.tip:hover .tip-pop{visibility:visible;opacity:1;pointer-events:auto}
+.tip .tip-pop::before{content:'';position:absolute;width:100%;height:14px;left:0;top:-14px}
+.tip .tip-pop::after{content:'';position:absolute;width:100%;height:14px;left:0;bottom:-14px}
 </style>
 </head>
 <body>
@@ -71,19 +73,25 @@ const bP=rt=>{let b="QB",bo=0;PP.forEach(p=>{const o=cO(rt,p);if(o>bo){bo=o;b=p;
 const IQ_RATINGS=new Set(["thv","elu","rtr","hnd","rbk","pbk","pcv","tck","prs","rns","kac","pac"]);
 const PWR_RATINGS=new Set(["thp","tha","kpw","ppw"]);
 const baseChg=age=>age<=21?2:age<=25?1:age<=27?0:age<=29?-1:age<=31?-2:age<=34?-3:-4;
-const ageMod=(key,age)=>{
-if(key==="hgt")return -(baseChg(age)); // height doesn't change
+const ageMod=(key,age,mode)=>{
+if(key==="hgt"){if(mode==="prog35")return age<=27?0.3:age<=30?-0.7:-1.2;return -(baseChg(age));}
 if(key==="spd")return age<=27?0:age<=30?-2:-4;
 if(key==="endu")return age<=23?4:age<=30?0:-4;
+if(mode==="prog35"){
+// ProgCode 3.5: hnd/rtr use power formula (more resilient)
+if(key==="hnd"||key==="rtr"){const pm=age<=27?0:age<=29?0.5:age<=31?1.5:2;return pm;}
+// ProgCode 3.5: elu drops hard after 28
+if(key==="elu")return age>=28?-4:0;
+}
 if(IQ_RATINGS.has(key))return age<=21?3:age<=23?2:age<=27?0:age<=29?0.5:age<=31?1.5:2;
 if(PWR_RATINGS.has(key))return age<=27?0:age<=29?0.5:age<=31?1.5:2;
-return 0; // stre, bsc just use base
+return 0;
 };
-const projectRatings=(rt,age,seasons)=>{
+const projectRatings=(rt,age,seasons,mode)=>{
 const proj=[];let cur={};RK.forEach(k=>cur[k]=rt[k]||0);
 for(let s=0;s<seasons;s++){
 const a=age+s;const next={};
-RK.forEach(k=>{const chg=baseChg(a)+ageMod(k,a);next[k]=bd(Math.round(cur[k]+chg),0,100);});
+RK.forEach(k=>{const chg=baseChg(a)+ageMod(k,a,mode);next[k]=bd(Math.round(cur[k]+chg),0,100);});
 next.pos=rt.pos;cur=next;
 const bp=bP(cur);proj.push({age:a+1,rt:{...cur},ovr:bp.ovr,pos:bp.pos});}
 return proj;};
@@ -175,7 +183,7 @@ function App(){
 const[data,setData]=useState(null);const[err,setErr]=useState(null);const[myTid,setMyTid]=useState(null);
 const[tSel,setTSel]=useState(false);const[tab,setTab]=useState("roster");const[pf,setPf]=useState("ALL");
 const[sort,setSort]=useState({key:"ovr",dir:"desc"});const[dyf,setDyf]=useState("ALL");
-const[drag,setDrag]=useState(false);const[dark,setDark]=useState(true);const[selP,setSelP]=useState(null);
+const[drag,setDrag]=useState(false);const[dark,setDark]=useState(true);const[selP,setSelP]=useState(null);const[progMode,setProgMode]=useState("default");
 const[mockRes,setMockRes]=useState(null);const[posSort,setPosSort]=useState({});const[mSort,setMSort]=useState({});
 const[compMode,setCompMode]=useState("team");const[compTid,setCompTid]=useState(null);
 const[compP1,setCompP1]=useState(null);const[compP2,setCompP2]=useState(null);
@@ -192,7 +200,16 @@ return()=>{if(pmRef.current)window.removeEventListener("message",pmRef.current);
 },[]);
 
 const load=t=>{try{setErr(null);setData(pD(t));setTSel(false);setMyTid(null);}catch(e){setErr(e.message);}};
-const hFile=f=>{if(!f)return;const r=new FileReader();r.onload=e=>load(e.target.result);r.readAsText(f);};
+const hFile=f=>{if(!f)return;const r=new FileReader();r.onload=async e=>{
+const buf=e.target.result;const bytes=new Uint8Array(buf);
+if(bytes[0]===0x1f&&bytes[1]===0x8b){
+try{const ds=new DecompressionStream("gzip");const w=ds.writable.getWriter();w.write(buf);w.close();
+const reader=ds.readable.getReader();const chunks=[];let done=false;
+while(!done){const{value,done:d}=await reader.read();if(value)chunks.push(value);done=d;}
+const merged=new Uint8Array(chunks.reduce((a,c)=>a+c.length,0));let offset=0;chunks.forEach(c=>{merged.set(c,offset);offset+=c.length;});
+load(new TextDecoder().decode(merged));}catch(err){setErr("Gzip decompression failed: "+err.message);}
+}else{load(new TextDecoder().decode(buf));}};
+r.readAsArrayBuffer(f);};
 const hDrop=e=>{e.preventDefault();setDrag(false);hFile(e.dataTransfer.files[0]);};
 const selTm=t=>{setMyTid(t);setTSel(true);setTab("depth");setPf("ALL");setSort({key:"ovr",dir:"desc"});};
 const oS=k=>setSort(s=>({key:k,dir:s.key===k&&s.dir==="desc"?"asc":"desc"}));
@@ -255,7 +272,7 @@ return{myPick,myRecord,pickSource,myDraftPicks,tradedAway,pickYears,history,year
 // Aging projections for entire roster (must come before capData)
 const agingData=useMemo(()=>{
 if(!myP.length)return{players:[],posForecasts:[],drops:[],risers:[],ageDist:[]};
-const players=myP.map(p=>{const proj=projectRatings(p.rt,p.age,3);
+const players=myP.map(p=>{const proj=projectRatings(p.rt,p.age,3,progMode);
 return{...p,ovr1:proj[0]?.ovr||p.ovr,ovr2:proj[1]?.ovr||p.ovr,ovr3:proj[2]?.ovr||p.ovr,chg3:(proj[2]?.ovr||p.ovr)-p.ovr};});
 // Position group forecast
 const posForecasts=PP.map(pos=>{const pp=players.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);const sc=(TPW[pos]||[1]).length;const st=pp.slice(0,sc);if(!st.length)return{pos,now:0,y1:0,y2:0,y3:0,chg:0};
@@ -269,7 +286,7 @@ const risers=[...players].sort((a,b)=>b.chg3-a.chg3).filter(p=>p.chg3>0).slice(0
 const phases={Dev:0,Rise:0,Prime:0,"Late P.":0,Decl:0,Vet:0,Done:0};
 players.forEach(p=>{const key=p.phase.l.replace(".","");if(key in phases)phases[key]++;else{const k2=Object.keys(phases).find(k=>key.startsWith(k));if(k2)phases[k2]++;}});
 const ageDist=Object.entries(phases).filter(([,v])=>v>0).map(([k,v])=>({label:k,count:v}));
-return{players,posForecasts,drops,risers,ageDist};},[myP]);
+return{players,posForecasts,drops,risers,ageDist};},[myP,progMode]);
 
 // Cap/salary analysis (depends on agingData)
 const capData=useMemo(()=>{
@@ -400,7 +417,7 @@ return(<div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"r
 </div>
 
 {/* Aging Projection */}
-{(()=>{const proj=projectRatings(p.rt,p.age,3);const timeline=[{label:"Now",age:p.age,ovr:p.ovr,pos:p.pos},...proj.map((pr,i)=>({label:`+${i+1}`,age:pr.age,ovr:pr.ovr,pos:pr.pos}))];
+{(()=>{const proj=projectRatings(p.rt,p.age,3,progMode);const timeline=[{label:"Now",age:p.age,ovr:p.ovr,pos:p.pos},...proj.map((pr,i)=>({label:`+${i+1}`,age:pr.age,ovr:pr.ovr,pos:pr.pos}))];
 const maxOvr=Math.max(...timeline.map(t=>t.ovr));const minOvr=Math.min(...timeline.map(t=>t.ovr));
 // Find biggest rating changes over 3 seasons
 const rChanges=RK.filter(k=>k!=="hgt").map(k=>({key:k,name:RN[k],now:p.rt[k],then:proj[2]?.rt[k]||p.rt[k],chg:(proj[2]?.rt[k]||p.rt[k])-p.rt[k]})).filter(r=>Math.abs(r.chg)>=2).sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg));
@@ -476,10 +493,10 @@ if(!data) return(
 {/* File Upload */}
 <div onDragOver={e=>{e.preventDefault();setDrag(true);}} onDragLeave={()=>setDrag(false)} onDrop={hDrop} onClick={()=>fileRef.current?.click()}
 style={{...cs,padding:"32px 20px",textAlign:"center",cursor:"pointer",border:drag?`2px dashed #e63946`:`2px dashed ${$.t1}`,transition:"all 0.2s"}}>
-<input ref={fileRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>hFile(e.target.files[0])}/>
+<input ref={fileRef} type="file" accept=".json,.gz" style={{display:"none"}} onChange={e=>hFile(e.target.files[0])}/>
 <div style={{fontSize:36,marginBottom:8}}>{drag?"📂":"📁"}</div>
-<div style={{fontSize:15,fontWeight:600,color:$.t8,marginBottom:4}}>{drag?"Drop it here!":"Drop your FBGM export JSON here"}</div>
-<div style={{fontSize:12,color:$.t4}}>or click to browse files</div>
+<div style={{fontSize:15,fontWeight:600,color:$.t8,marginBottom:4}}>{drag?"Drop it here!":"Drop your FBGM export here"}</div>
+<div style={{fontSize:12,color:$.t4}}>JSON or gzip compressed · or click to browse</div>
 </div>
 {err&&<div style={{color:"#e74c3c",fontSize:12,margin:"8px 0",textAlign:"center"}}>⚠️ {err}</div>}
 
@@ -533,7 +550,12 @@ const disp=dSort(dFilt(raw));
 return(<div style={{padding:"16px 12px",maxWidth:740,margin:"0 auto"}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
 <div><h1 style={{...H,fontSize:18,margin:0,letterSpacing:1,background:"linear-gradient(135deg,#e63946,#f4a261)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><span style={{fontSize:11,color:$.t4,...M}}>Season {data.season} · {myTm?.name||`Team #${myTid}`}</span></div>
-<div style={{display:"flex",gap:5}}><ThemeBtn/><button onClick={()=>setTSel(false)} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>Switch Team</button><button onClick={()=>{setData(null);setTSel(false);}} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>New File</button></div></div>
+<div style={{display:"flex",gap:5,alignItems:"center"}}><ThemeBtn/>
+<div className="tip" style={{position:"relative"}}>
+<button onClick={()=>setProgMode(m=>m==="default"?"prog35":"default")} style={{background:progMode==="prog35"?"rgba(46,204,113,0.15)":$.btn,border:`1px solid ${progMode==="prog35"?"#2ecc71":$.btnb}`,borderRadius:6,color:progMode==="prog35"?"#2ecc71":$.t,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>{progMode==="prog35"?"Prog 3.5":"Default"}</button>
+<span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:220,top:"calc(100% + 6px)",bottom:"auto",right:0,left:"auto",transform:"none"}}>Progression mode. Default = ZenGM source code aging curves. Prog 3.5 = community progression code from <a href="https://discord.com/channels/290013534023057409/1455882262313828443/" target="_blank" style={{color:"#e63946"}}>BBGM Discord</a>. Affects all projections.</span>
+</div>
+<button onClick={()=>setTSel(false)} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>Switch Team</button><button onClick={()=>{setData(null);setTSel(false);}} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>New File</button></div></div>
 
 <div style={{display:"flex",gap:0,marginBottom:10,background:$.tab,borderRadius:8,overflow:"hidden",border:`1px solid ${$.tabb}`}}>
 {TABS.map(tb=><button key={tb.id} onClick={()=>cTab(tb.id)} style={{flex:1,padding:"9px 2px",border:"none",cursor:"pointer",fontSize:12,fontWeight:tab===tb.id?700:500,fontFamily:"'DM Sans',sans-serif",background:tab===tb.id?$.acc:"transparent",color:tab===tb.id?"#e63946":$.tabi,borderBottom:tab===tb.id?"2px solid #e63946":"2px solid transparent"}}>{tb.label}{tb.id==="depth"&&expP.length>0&&<span style={{fontSize:9,marginLeft:2,color:"#e74c3c"}}>⚠{expP.length}</span>}</button>)}</div>
@@ -796,7 +818,7 @@ return <div style={{display:"grid",gridTemplateColumns:hasCap?"repeat(4, 1fr)":"
 </div>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 24px 32px 44px 28px",gap:4,padding:"0 4px",marginBottom:3,fontSize:10,color:$.t4}}>
 <span>Name</span><span style={{textAlign:"center"}}>Age</span><span style={{textAlign:"center"}}>OVR</span><span style={{textAlign:"center"}}>→3y</span><span style={{textAlign:"center"}}>Pot</span></div>
-{g.players.map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+{g.players.map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 24px 32px 44px 28px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
@@ -811,7 +833,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Expiring soon + worth keeping (OVR ≥55, age ≤30)</p>
 {capData.extWatch.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="ext" label="Name" sk="name"/><MSH sec="ext" label="Pos" sk="pos" align="center"/><MSH sec="ext" label="Age" sk="age" align="center"/><MSH sec="ext" label="OVR" sk="ovr" align="center"/><MSH sec="ext" label="→3y" sk="ovr3" align="center"/><MSH sec="ext" label="Pot" sk="pot" align="center"/><MSH sec="ext" label="Contract" sk="salary" align="right"/></div>
-{mSrt(capData.extWatch,"ext").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+{mSrt(capData.extWatch,"ext").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -827,7 +849,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Former team players now free agents. Projection shows expected OVR in 3 years.</p>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="rsn" label="Name" sk="name"/><MSH sec="rsn" label="Pos" sk="pos" align="center"/><MSH sec="rsn" label="Age" sk="age" align="center"/><MSH sec="rsn" label="OVR" sk="ovr" align="center"/><MSH sec="rsn" label="→3y" sk="ovr3" align="center"/><MSH sec="rsn" label="Pot" sk="pot" align="center"/><span></span></div>
-{mSrt(capData.resignWatch,"rsn").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
+{mSrt(capData.resignWatch,"rsn").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -843,7 +865,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Become free agents after season. Projection shows expected OVR in 3 years.</p>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="exp" label="Name" sk="name"/><MSH sec="exp" label="Pos" sk="pos" align="center"/><MSH sec="exp" label="Age" sk="age" align="center"/><MSH sec="exp" label="OVR" sk="ovr" align="center"/><MSH sec="exp" label="→3y" sk="ovr3" align="center"/><MSH sec="exp" label="Pot" sk="pot" align="center"/><MSH sec="exp" label="Salary" sk="salary" align="right"/><span></span></div>
-{mSrt(expP,"exp").slice(0,15).map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
+{mSrt(expP,"exp").slice(0,15).map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -861,7 +883,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Speed pos age 27+ · IQ pos age 30+ · All age 32+</p>
 {tr.sell.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="sell" label="Name" sk="name"/><MSH sec="sell" label="Pos" sk="pos" align="center"/><MSH sec="sell" label="Age" sk="age" align="center"/><MSH sec="sell" label="OVR" sk="ovr" align="center"/><MSH sec="sell" label="→3y" sk="ovr3" align="center"/><MSH sec="sell" label="Pot" sk="pot" align="center"/><MSH sec="sell" label="Contract" sk="salary" align="right"/><span></span></div>
-{mSrt(tr.sell,"sell").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+{mSrt(tr.sell,"sell").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -1016,8 +1038,8 @@ return <>
 </div>
 {compP1&&compP2&&(()=>{
 const p1=compP1,p2=compP2;
-const proj1=projectRatings(p1.rt,p1.age,3);const ovr1_3=proj1[2]?.ovr||p1.ovr;
-const proj2=projectRatings(p2.rt,p2.age,3);const ovr2_3=proj2[2]?.ovr||p2.ovr;
+const proj1=projectRatings(p1.rt,p1.age,3,progMode);const ovr1_3=proj1[2]?.ovr||p1.ovr;
+const proj2=projectRatings(p2.rt,p2.age,3,progMode);const ovr2_3=proj2[2]?.ovr||p2.ovr;
 const pos=p1.pos;const keys=[...new Set([...(keyRatings[p1.pos]||[]),...(keyRatings[p2.pos]||[])])];
 const t1=p1.tid>=0?data.teams.find(t=>t.tid===p1.tid):null;
 const t2=p2.tid>=0?data.teams.find(t=>t.tid===p2.tid):null;
