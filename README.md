@@ -19,7 +19,7 @@ If there are any questions, please DM me here or in this Discord thread: [ZenGM 
 
 ## How to Use
 
-1. In Football GM → **Tools** → **Export League** → select **Players**, **All team data**, and **Draft picks** (all three required!) → Download
+1. In Football GM → **Tools** → **Export League** → select **Players**, **All team data**, **Draft picks**, and **League settings** (all four required!) → Download
 2. Open the Advisor → drag & drop your JSON or gzip file
 3. Select your team from the Power Rankings → explore
 

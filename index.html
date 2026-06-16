@@ -732,6 +732,7 @@ Select these options:
 <div style={{color:"#2ecc71"}}>✅ <strong>Players</strong> <span style={{color:$.t4}}>— required</span></div>
 <div style={{color:"#2ecc71"}}>✅ <strong>All team data</strong> <span style={{color:$.t4}}>— required</span></div>
 <div style={{color:"#2ecc71"}}>✅ <strong>Draft picks</strong> <span style={{color:$.t4}}>— for Mock Draft & Pick Tracker</span></div>
+<div style={{color:"#2ecc71"}}>✅ <strong>League settings</strong> <span style={{color:$.t4}}>— for Salary Cap, Difficulty & Trade AI</span></div>
 <div style={{color:$.t3}}>☐ Schedule <span style={{color:$.t2}}>— not needed</span></div>
 <div style={{color:$.t3}}>☐ League settings <span style={{color:$.t2}}>— not needed</span></div>
 <div style={{color:$.t3}}>☐ Game state <span style={{color:$.t2}}>— not needed</span></div>
@@ -1262,7 +1263,8 @@ return <>
 <div style={cs}>
 <div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:4}}>🔄 Trade Checker<Tip text="Simulates the game's trade AI using the full ValueChangeCalculator formula (fudgeFactor, EXPONENT, injury discount, pick regression). Enforces salary cap. R=Rebuilding, C=Contending."/></div>
 <p style={{fontSize:10,color:$.t4,margin:"0 0 4px"}}>Select a team, add players/picks, check if the AI accepts.</p>
-{(!data.draftPicks||data.draftPicks.length===0)&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,fontSize:11,color:"#e74c3c",marginBottom:8}}>⚠ No draft picks found in your export! Make sure to check <strong>Draft Picks</strong> when exporting, or use the Quick Export bookmarklet.</div>}
+{(!data.draftPicks||data.draftPicks.length===0)&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,fontSize:11,color:"#e74c3c",marginBottom:8}}>⚠ No draft picks found in your export! Make sure to check <strong>Draft Picks</strong> and <strong>League Settings</strong> when exporting, or use the Quick Export bookmarklet.</div>}
+{(!data.capSettings||data.capSettings.salaryCap===200000)&&data.draftPicks&&data.draftPicks.length>0&&<div style={{padding:"6px 10px",background:"rgba(241,196,15,0.1)",border:"1px solid rgba(241,196,15,0.3)",borderRadius:6,fontSize:10,color:"#f1c40f",marginBottom:8}}>⚠ League settings not found in export. Using default cap ($200M). Re-export with <strong>League Settings</strong> checked for accurate cap data.</div>}
 {data.draftPicks&&data.draftPicks.length>0&&<div style={{fontSize:9,color:$.t4,marginBottom:8}}>{data.draftPicks.length} draft picks loaded</div>}
 <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:12}}>
 {data.teams.filter(t=>t.tid!==myTid&&t.tid>=0).sort((a,b)=>a.abbrev.localeCompare(b.abbrev)).map(t=><button key={t.tid} onClick={()=>{setTradeTid(t.tid);setTradeMyPids([]);setTradeTheirPids([]);setTradeMyDpids([]);setTradeTheirDpids([]);}} style={{padding:"4px 8px",fontSize:10,border:`1px solid ${tradeTid===t.tid?"#e63946":$.cb}`,borderRadius:5,cursor:"pointer",background:tradeTid===t.tid?"rgba(230,57,70,0.15)":$.btn,color:tradeTid===t.tid?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
@@ -1378,7 +1380,7 @@ return <>
 <div style={{fontSize:15,fontWeight:700,color:$.t8}}>🔍 Shop Player / Pick<Tip text="Select one or more players and/or picks to shop as a package. Finds 1-for-1 up to 3-for-1 offers from all 31 teams. Cap! = trade exceeds your salary cap."/></div>
 {isActive&&<button onClick={()=>{setShopPids([]);setShopDpids([]);}} style={{...M,fontSize:9,padding:"3px 8px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:4,color:"#e74c3c",cursor:"pointer"}}>Clear ({shopPids.length+shopDpids.length})</button>}
 </div>
-{(!data.draftPicks||data.draftPicks.length===0)&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,fontSize:11,color:"#e74c3c",marginBottom:8}}>⚠ No draft picks in export. Re-export with <strong>Draft Picks</strong> checked, or use the Quick Export bookmarklet.</div>}
+{(!data.draftPicks||data.draftPicks.length===0)&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,fontSize:11,color:"#e74c3c",marginBottom:8}}>⚠ No draft picks in export. Re-export with <strong>Draft Picks</strong> and <strong>League Settings</strong> checked, or use the Quick Export bookmarklet.</div>}
 
 <div style={{display:"grid",gridTemplateColumns:grid2,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
 <span></span><MSH sec="shop" label="Name" sk="name"/><MSH sec="shop" label="Pos" sk="pos" align="center"/><MSH sec="shop" label="OVR" sk="ovr" align="center"/><MSH sec="shop" label="Pot" sk="pot" align="center"/><MSH sec="shop" label="→3y" sk="ovr3" align="center"/><MSH sec="shop" label="Age" sk="age" align="center"/><MSH sec="shop" label="Salary" sk="salary" align="right"/><span style={{textAlign:"center",fontSize:9}}>Yrs</span><MSH sec="shop" label="Val" sk="tradeVal" align="right"/></div>
