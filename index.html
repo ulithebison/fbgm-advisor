@@ -337,8 +337,8 @@ const[compP1,setCompP1]=useState(null);const[compP2,setCompP2]=useState(null);
 const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
 const[tradeTid,setTradeTid]=useState(null);const[tradeMyPids,setTradeMyPids]=useState([]);const[tradeTheirPids,setTradeTheirPids]=useState([]);
 const[tradeMyDpids,setTradeMyDpids]=useState([]);const[tradeTheirDpids,setTradeTheirDpids]=useState([]);
-const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopFilter,setShopFilter]=useState("ALL");
-const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);};
+const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopFilter,setShopFilter]=useState("ALL");const[shopTeamFilter,setShopTeamFilter]=useState("ALL");
+const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);setShopTeamFilter("ALL");};
 const[tSort,setTSort]=useState({my:{key:"ovr",dir:"desc"},their:{key:"ovr",dir:"desc"}});
 const fileRef=useRef(null);
 const $=dark?TH.dark:TH.light;
@@ -464,11 +464,21 @@ for(const tp of teamP.slice(0,6)){for(let i=0;i<Math.min(teamPicks.length,4);i++
 for(let i=0;i<Math.min(teamP.length,5);i++){for(let j=i+1;j<Math.min(teamP.length,5);j++){for(let k=j+1;k<Math.min(teamP.length,5);k++)tryOffer([teamP[i],teamP[j],teamP[k]],[]);}}
 // 3 picks
 for(let i=0;i<Math.min(teamPicks.length,4);i++){for(let j=i+1;j<Math.min(teamPicks.length,4);j++){for(let k=j+1;k<Math.min(teamPicks.length,4);k++)tryOffer([],[teamPicks[i],teamPicks[j],teamPicks[k]]);}}
+// 4 players
+for(let i=0;i<Math.min(teamP.length,4);i++){for(let j=i+1;j<Math.min(teamP.length,4);j++){for(let k=j+1;k<Math.min(teamP.length,4);k++){for(let l=k+1;l<Math.min(teamP.length,4);l++)tryOffer([teamP[i],teamP[j],teamP[k],teamP[l]],[]);}}}
+// 3 players + 1 pick
+for(let i=0;i<Math.min(teamP.length,4);i++){for(let j=i+1;j<Math.min(teamP.length,4);j++){for(let k=j+1;k<Math.min(teamP.length,4);k++){for(const dp of teamPicks.slice(0,3))tryOffer([teamP[i],teamP[j],teamP[k]],[dp]);}}}
+// 2 players + 2 picks
+for(let i=0;i<Math.min(teamP.length,5);i++){for(let j=i+1;j<Math.min(teamP.length,5);j++){for(let pi=0;pi<Math.min(teamPicks.length,3);pi++){for(let pj=pi+1;pj<Math.min(teamPicks.length,3);pj++)tryOffer([teamP[i],teamP[j]],[teamPicks[pi],teamPicks[pj]]);}}}
+// 1 player + 3 picks
+for(const tp of teamP.slice(0,4)){for(let i=0;i<Math.min(teamPicks.length,3);i++){for(let j=i+1;j<Math.min(teamPicks.length,3);j++){for(let k=j+1;k<Math.min(teamPicks.length,3);k++)tryOffer([tp],[teamPicks[i],teamPicks[j],teamPicks[k]]);}}}
+// 4 picks
+for(let i=0;i<Math.min(teamPicks.length,3);i++){for(let j=i+1;j<Math.min(teamPicks.length,3);j++){for(let k=j+1;k<Math.min(teamPicks.length,3);k++){for(let l=k+1;l<Math.min(teamPicks.length,3);l++)tryOffer([],[teamPicks[i],teamPicks[j],teamPicks[k],teamPicks[l]]);}}}
 });
 let filtered=offers;
 if(shopFilter==="PICKS")filtered=offers.filter(o=>o.players.length===0&&o.picks.length>0);
 else if(shopFilter!=="ALL")filtered=offers.filter(o=>o.players.some(p=>p.pos===shopFilter));
-return filtered.sort((a,b)=>b.dvMe-a.dvMe).slice(0,50);
+return filtered.sort((a,b)=>b.dvMe-a.dvMe).slice(0,100);
 },[shopPids,shopDpids,shopFilter,data,tEng,myTid]);
 const nPS=useMemo(()=>new Set(nR.filter(n=>n.g==="F"||n.g==="D"||n.g==="C"||n.g==="C+"||n.shortage>0||n.diff<-5).map(n=>n.pos)),[nR]);
 
@@ -1166,7 +1176,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <div style={{fontSize:14,fontWeight:700,color:"#3498db",marginBottom:4}}>🔄 Re-sign Watch<Tip text="KEEP = young+upside or elite. KEY = good starter. EVAL = borderline. PASS = not worth it."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Former team players now free agents. Projection shows expected OVR in 3 years.</p>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
-<MSH sec="rsn" label="Name" sk="name"/><MSH sec="rsn" label="Pos" sk="pos" align="center"/><MSH sec="rsn" label="Age" sk="age" align="center"/><MSH sec="rsn" label="OVR" sk="ovr" align="center"/><MSH sec="rsn" label="→3y" sk="ovr3" align="center"/><MSH sec="rsn" label="Pot" sk="pot" align="center"/><span></span></div>
+<MSH sec="rsn" label="Name" sk="name"/><span></span><MSH sec="rsn" label="Pos" sk="pos" align="center"/><MSH sec="rsn" label="Age" sk="age" align="center"/><MSH sec="rsn" label="OVR" sk="ovr" align="center"/><MSH sec="rsn" label="→3y" sk="ovr3" align="center"/><MSH sec="rsn" label="Pot" sk="pot" align="center"/><span></span></div>
 {mSrt(capData.resignWatch,"rsn").map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;const cat=getCat(p,chg);
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
@@ -1183,7 +1193,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <div style={{fontSize:14,fontWeight:700,color:"#e67e22",marginBottom:4}}>⚠️ Expiring Contracts ({expP.length})<Tip text="KEEP = young+upside or elite. KEY = good starter. EVAL = depends on price. PASS = let walk."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Become free agents after season. Projection shows expected OVR in 3 years.</p>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 48px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
-<MSH sec="exp" label="Name" sk="name"/><MSH sec="exp" label="Pos" sk="pos" align="center"/><MSH sec="exp" label="Age" sk="age" align="center"/><MSH sec="exp" label="OVR" sk="ovr" align="center"/><MSH sec="exp" label="→3y" sk="ovr3" align="center"/><MSH sec="exp" label="Pot" sk="pot" align="center"/><MSH sec="exp" label="Salary" sk="salary" align="right"/><span></span></div>
+<MSH sec="exp" label="Name" sk="name"/><span></span><MSH sec="exp" label="Pos" sk="pos" align="center"/><MSH sec="exp" label="Age" sk="age" align="center"/><MSH sec="exp" label="OVR" sk="ovr" align="center"/><MSH sec="exp" label="→3y" sk="ovr3" align="center"/><MSH sec="exp" label="Pot" sk="pot" align="center"/><MSH sec="exp" label="Salary" sk="salary" align="right"/><span></span></div>
 {mSrt(expP,"exp").slice(0,15).map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;const cat=getCat(p,chg);
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 48px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
@@ -1220,7 +1230,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <div style={{fontSize:14,fontWeight:700,color:"#e67e22",marginBottom:4}}>🔄 Trade Candidates<Tip text="OVR below position avg + ≥$2M salary. Releasing doesn't free cap in FBGM — trade to get salary off books."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Below position avg — trade to free salary</p>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 40px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
-<MSH sec="trade" label="Name" sk="name"/><MSH sec="trade" label="Pos" sk="pos" align="center"/><MSH sec="trade" label="Age" sk="age" align="center"/><MSH sec="trade" label="OVR" sk="ovr" align="center"/><MSH sec="trade" label="→3y" sk="ovr3" align="center"/><MSH sec="trade" label="Pot" sk="pot" align="center"/><MSH sec="trade" label="vs ø" sk="posAvgOvr" align="center"/><MSH sec="trade" label="Contract" sk="salary" align="right"/></div>
+<MSH sec="trade" label="Name" sk="name"/><span></span><MSH sec="trade" label="Pos" sk="pos" align="center"/><MSH sec="trade" label="Age" sk="age" align="center"/><MSH sec="trade" label="OVR" sk="ovr" align="center"/><MSH sec="trade" label="→3y" sk="ovr3" align="center"/><MSH sec="trade" label="Pot" sk="pot" align="center"/><MSH sec="trade" label="vs ø" sk="posAvgOvr" align="center"/><MSH sec="trade" label="Contract" sk="salary" align="right"/></div>
 {mSrt(capData.cuts,"trade").map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 40px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",whiteSpace:"nowrap"}}>Trade</span>
@@ -1394,7 +1404,8 @@ const isActive=shopPids.length>0||shopDpids.length>0;
 const toggleShopPid=(pid)=>setShopPids(l=>l.includes(pid)?l.filter(x=>x!==pid):[...l,pid]);
 const toggleShopDpid=(dpid)=>setShopDpids(l=>l.includes(dpid)?l.filter(x=>x!==dpid):[...l,dpid]);
 const offerSort=mSort["offers"]||{key:"dvMe",dir:"desc"};
-const sortedOffers=[...shopOffers].sort((a,b)=>{const k=offerSort.key,d=offerSort.dir;
+const teamFiltered=shopTeamFilter==="ALL"?shopOffers:shopOffers.filter(o=>o.team.abbrev===shopTeamFilter);
+const sortedOffers=[...teamFiltered].sort((a,b)=>{const k=offerSort.key,d=offerSort.dir;
 if(k==="team")return d==="asc"?a.team.abbrev.localeCompare(b.team.abbrev):b.team.abbrev.localeCompare(a.team.abbrev);
 if(k==="returnPos")return d==="asc"?(a.returnPos||"").localeCompare(b.returnPos||""):(b.returnPos||"").localeCompare(a.returnPos||"");
 const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
@@ -1444,9 +1455,14 @@ background:shopDpids.includes(dp.dpid)?"rgba(230,57,70,0.15)":"rgba(241,196,15,0
 Offers for {[...shopPids.map(pid=>{const p=data.players.find(x=>x.pid===pid);return p?p.name:"?"}),...shopDpids.map(dpid=>{const dp=(data.draftPicks||[]).find(d=>d.dpid===dpid);return dp?`${dp.season} R${dp.round}`:""})].filter(Boolean).join(" + ")}
 </div>
 </div>
-<div style={{display:"flex",gap:3,marginBottom:8,flexWrap:"wrap"}}>
+<div style={{display:"flex",gap:3,marginBottom:4,flexWrap:"wrap"}}>
 {posOpts.map(f=><button key={f} onClick={()=>setShopFilter(f)} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopFilter===f?"#e63946":$.cb}`,borderRadius:4,cursor:"pointer",background:shopFilter===f?"rgba(230,57,70,0.15)":$.btn,color:shopFilter===f?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopFilter===f?700:400}}>{f}</button>)}
 </div>
+{(()=>{const teams=[...new Set(shopOffers.map(o=>o.team.abbrev))].sort();
+return teams.length>1&&<div style={{display:"flex",gap:3,marginBottom:8,flexWrap:"wrap"}}>
+<button onClick={()=>setShopTeamFilter("ALL")} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopTeamFilter==="ALL"?"#3498db":$.cb}`,borderRadius:4,cursor:"pointer",background:shopTeamFilter==="ALL"?"rgba(52,152,219,0.15)":$.btn,color:shopTeamFilter==="ALL"?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopTeamFilter==="ALL"?700:400}}>ALL</button>
+{teams.map(t=><button key={t} onClick={()=>setShopTeamFilter(t===shopTeamFilter?"ALL":t)} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopTeamFilter===t?"#3498db":$.cb}`,borderRadius:4,cursor:"pointer",background:shopTeamFilter===t?"rgba(52,152,219,0.15)":$.btn,color:shopTeamFilter===t?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopTeamFilter===t?700:400}}>{t}</button>)}
+</div>;})()}
 
 {shopOffers.length===0&&<div style={{color:$.t4,fontSize:12,padding:8}}>No viable trade offers found{shopFilter!=="ALL"?" for this filter":""}.</div>}
 
