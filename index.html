@@ -370,6 +370,8 @@ return{pos:n.pos,grade:n.g,gradeColor:n.c,diff:n.diff,avgOvr:n.avgOvr,la:n.la,pl
 }).filter(g=>g.players.length>0);},[data,pGr,nR]);
 
 const tEng=useMemo(()=>tradeCalc(data),[data]);
+const projMap=useMemo(()=>{if(!data)return{};const m={};data.players.forEach(p=>{try{const pr=projectRatings(p.rt,p.age,3,progMode);m[p.pid]=pr[2]?.ovr||p.ovr;}catch(e){m[p.pid]=p.ovr;}});return m;},[data,progMode]);
+const p3=pid=>projMap[pid]||0;
 const tradeEval=useMemo(()=>{
 if(!tEng||!data||tradeTid===null)return null;
 const otherTeam=data.teams.find(t=>t.tid===tradeTid);if(!otherTeam)return null;
@@ -1078,7 +1080,7 @@ return <div style={{display:"grid",gridTemplateColumns:hasCap?"repeat(4, 1fr)":"
 </div>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 24px 32px 44px 28px",gap:4,padding:"0 4px",marginBottom:3,fontSize:10,color:$.t4}}>
 <span>Name</span><span style={{textAlign:"center"}}>Age</span><span style={{textAlign:"center"}}>OVR</span><span style={{textAlign:"center"}}>→3y</span><span style={{textAlign:"center"}}>Pot</span></div>
-{g.players.map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+{g.players.map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 24px 32px 44px 28px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
@@ -1093,7 +1095,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Expiring soon + worth keeping (OVR ≥55, age ≤30)</p>
 {capData.extWatch.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="ext" label="Name" sk="name"/><MSH sec="ext" label="Pos" sk="pos" align="center"/><MSH sec="ext" label="Age" sk="age" align="center"/><MSH sec="ext" label="OVR" sk="ovr" align="center"/><MSH sec="ext" label="→3y" sk="ovr3" align="center"/><MSH sec="ext" label="Pot" sk="pot" align="center"/><MSH sec="ext" label="Contract" sk="salary" align="right"/></div>
-{mSrt(capData.extWatch,"ext").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+{mSrt(capData.extWatch,"ext").map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -1109,7 +1111,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Former team players now free agents. Projection shows expected OVR in 3 years.</p>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="rsn" label="Name" sk="name"/><MSH sec="rsn" label="Pos" sk="pos" align="center"/><MSH sec="rsn" label="Age" sk="age" align="center"/><MSH sec="rsn" label="OVR" sk="ovr" align="center"/><MSH sec="rsn" label="→3y" sk="ovr3" align="center"/><MSH sec="rsn" label="Pot" sk="pot" align="center"/><span></span></div>
-{mSrt(capData.resignWatch,"rsn").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
+{mSrt(capData.resignWatch,"rsn").map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;const cat=getCat(p,chg);
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -1125,7 +1127,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Become free agents after season. Projection shows expected OVR in 3 years.</p>
 <div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="exp" label="Name" sk="name"/><MSH sec="exp" label="Pos" sk="pos" align="center"/><MSH sec="exp" label="Age" sk="age" align="center"/><MSH sec="exp" label="OVR" sk="ovr" align="center"/><MSH sec="exp" label="→3y" sk="ovr3" align="center"/><MSH sec="exp" label="Pot" sk="pot" align="center"/><MSH sec="exp" label="Salary" sk="salary" align="right"/><span></span></div>
-{mSrt(expP,"exp").slice(0,15).map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;const cat=getCat(p,chg);
+{mSrt(expP,"exp").slice(0,15).map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;const cat=getCat(p,chg);
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -1143,7 +1145,7 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Speed pos age 27+ · IQ pos age 30+ · All age 32+</p>
 {tr.sell.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="sell" label="Name" sk="name"/><MSH sec="sell" label="Pos" sk="pos" align="center"/><MSH sec="sell" label="Age" sk="age" align="center"/><MSH sec="sell" label="OVR" sk="ovr" align="center"/><MSH sec="sell" label="→3y" sk="ovr3" align="center"/><MSH sec="sell" label="Pot" sk="pot" align="center"/><MSH sec="sell" label="Contract" sk="salary" align="right"/><span></span></div>
-{mSrt(tr.sell,"sell").map((p,i)=>{const proj=projectRatings(p.rt,p.age,3,progMode);const ovr3=proj[2]?.ovr||p.ovr;const chg=ovr3-p.ovr;
+{mSrt(tr.sell,"sell").map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;
 return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -1207,7 +1209,7 @@ return <div key={pos} style={{marginBottom:10}}>
 {(()=>{
 const sortP=(arr,side)=>{const s=tSort[side];return[...arr].sort((a,b)=>{const k=s.key,d=s.dir;if(k==="name"||k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});};
 const TH=({side,label,sk,align})=>{const s=tSort[side];const a=s.key===sk;return <span onClick={()=>setTSort(t=>({...t,[side]:{key:sk,dir:t[side].key===sk&&t[side].dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:10,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
-const proj3=(p)=>{try{const r=projectRatings(p.rt,p.age,3,progMode);return r[2]?.ovr||p.ovr;}catch(e){return p.ovr;}};
+
 const calcSalaryAfter=(tid,pidsOut,pidsIn)=>{const base=data.players.filter(p=>p.tid===tid).reduce((s,p)=>s+p.salary,0);
 const out=pidsOut.reduce((s,pid)=>{const p=data.players.find(x=>x.pid===pid);return s+(p?p.salary:0);},0);
 const inn=pidsIn.reduce((s,pid)=>{const p=data.players.find(x=>x.pid===pid);return s+(p?p.salary:0);},0);
@@ -1254,7 +1256,7 @@ background:tradeMyPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",bord
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
 <span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
-<span style={{...M,fontSize:10,color:(()=>{const v=proj3(p);return v>p.ovr?"#2ecc71":v<p.ovr?"#e74c3c":$.t4;})(),textAlign:"center"}}>{proj3(p)}</span>
+<span style={{...M,fontSize:10,color:p3(p.pid)>p.ovr?"#2ecc71":p3(p.pid)<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{p3(p.pid)}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>
@@ -1282,7 +1284,7 @@ background:tradeTheirPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",b
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
 <span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
-<span style={{...M,fontSize:10,color:(()=>{const v=proj3(p);return v>p.ovr?"#2ecc71":v<p.ovr?"#e74c3c":$.t4;})(),textAlign:"center"}}>{proj3(p)}</span>
+<span style={{...M,fontSize:10,color:p3(p.pid)>p.ovr?"#2ecc71":p3(p.pid)<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{p3(p.pid)}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>
@@ -1322,7 +1324,7 @@ background:tradeTheirDpids.includes(dp.dpid)?"rgba(230,57,70,0.12)":"rgba(241,19
 const myDPs=(data.draftPicks||[]).filter(d=>d.tid===myTid).sort((a,b)=>a.season-b.season||a.round-b.round);
 const posOpts=["ALL","QB","RB","WR","TE","OL","DL","LB","CB","S","K","P","PICKS"];
 const isActive=shopPids.length>0||shopDpids.length>0;
-const proj3=(p)=>{try{const r=projectRatings(p.rt,p.age,3,progMode);return r[2]?.ovr||p.ovr;}catch(e){return p.ovr;}};
+
 const toggleShopPid=(pid)=>setShopPids(l=>l.includes(pid)?l.filter(x=>x!==pid):[...l,pid]);
 const toggleShopDpid=(dpid)=>setShopDpids(l=>l.includes(dpid)?l.filter(x=>x!==dpid):[...l,dpid]);
 const offerSort=mSort["offers"]||{key:"dvMe",dir:"desc"};
@@ -1344,7 +1346,7 @@ return <>
 <div style={{display:"grid",gridTemplateColumns:grid2,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
 <span></span><MSH sec="shop" label="Name" sk="name"/><MSH sec="shop" label="Pos" sk="pos" align="center"/><MSH sec="shop" label="OVR" sk="ovr" align="center"/><MSH sec="shop" label="Pot" sk="pot" align="center"/><MSH sec="shop" label="→3y" sk="ovr3" align="center"/><MSH sec="shop" label="Age" sk="age" align="center"/><MSH sec="shop" label="Salary" sk="salary" align="right"/><span style={{textAlign:"center",fontSize:9}}>Yrs</span><MSH sec="shop" label="Val" sk="tradeVal" align="right"/></div>
 <div style={{maxHeight:260,overflowY:"auto"}}>
-{mSrt(myP.map(p=>({...p,ovr3:proj3(p),tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"shop").map(p=><div key={p.pid} onClick={()=>toggleShopPid(p.pid)} style={{display:"grid",gridTemplateColumns:grid2,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
+{mSrt(myP.map(p=>({...p,ovr3:p3(p.pid),tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"shop").map(p=><div key={p.pid} onClick={()=>toggleShopPid(p.pid)} style={{display:"grid",gridTemplateColumns:grid2,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:shopPids.includes(p.pid)?"rgba(230,57,70,0.15)":"transparent",borderLeft:shopPids.includes(p.pid)?"3px solid #e63946":"3px solid transparent"}}>
 <span style={{fontSize:10,color:shopPids.includes(p.pid)?"#e63946":$.t3}}>{shopPids.includes(p.pid)?"✓":"○"}</span>
 <span style={{fontWeight:shopPids.includes(p.pid)?700:500,color:shopPids.includes(p.pid)?"#e63946":$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
@@ -1387,13 +1389,13 @@ Offers for {[...shopPids.map(pid=>{const p=data.players.find(x=>x.pid===pid);ret
 <OfH label="Team" sk="team" align="center"/><span style={{fontSize:9,color:$.t4}}>Return</span><OfH label="Pos" sk="returnPos" align="center"/><OfH label="OVR" sk="returnOvr" align="center"/><OfH label="Pot" sk="returnPot" align="center"/><OfH label="→3y" sk="return3y" align="center"/><OfH label="Age" sk="returnAge" align="center"/><OfH label="Sal" sk="returnSal" align="right"/><OfH label="Yrs" sk="returnYrs" align="center"/><OfH label="Val" sk="returnVal" align="center"/><OfH label="Deal" sk="dvMe" align="center"/><OfH label="dv" sk="dvThem" align="center"/></div>
 {sortedOffers.map((o,i)=>{const team=o.team;
 return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent",padding:"2px 0"}}>
-{o.players.map((p,pi)=>{const p3=proj3(p);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"36px minmax(45px,1fr) 26px 26px 26px 26px 22px 38px 24px 30px 36px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
+{o.players.map((p,pi)=>{const pp3=p3(p.pid);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"36px minmax(45px,1fr) 26px 26px 26px 26px 22px 38px 24px 30px 36px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
 <span style={{...M,fontWeight:700,fontSize:10,color:$.t,textAlign:"center"}}>{pi===0?team.abbrev:""}</span>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
 <span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
-<span style={{...M,fontSize:10,color:p3>p.ovr?"#2ecc71":p3<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{p3}</span>
+<span style={{...M,fontSize:10,color:pp3>p.ovr?"#2ecc71":pp3<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{pp3}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
@@ -1516,8 +1518,8 @@ return <>
 </div>
 {compP1&&compP2&&(()=>{
 const p1=compP1,p2=compP2;
-const proj1=projectRatings(p1.rt,p1.age,3,progMode);const ovr1_3=proj1[2]?.ovr||p1.ovr;
-const proj2=projectRatings(p2.rt,p2.age,3,progMode);const ovr2_3=proj2[2]?.ovr||p2.ovr;
+const ovr1_3=p3(p1.pid);
+const ovr2_3=p3(p2.pid);
 const pos=p1.pos;const keys=[...new Set([...(keyRatings[p1.pos]||[]),...(keyRatings[p2.pos]||[])])];
 const t1=p1.tid>=0?data.teams.find(t=>t.tid===p1.tid):null;
 const t2=p2.tid>=0?data.teams.find(t=>t.tid===p2.tid):null;
