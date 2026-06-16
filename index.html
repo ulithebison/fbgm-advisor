@@ -105,7 +105,7 @@ const tradeCalc=(data)=>{
 if(!data)return null;
 const allP=data.players.filter(p=>p.tid>=0);const numTeams=data.teams.filter(t=>t.tid>=0).length;
 // z-score: game uses playerOvrMean/Std based on OVRs
-const ovrs=allP.map(p=>p.ovr);
+const ovrs=allP.map(p=>p.trueOvr||p.ovr);// Source uses true OVR, not fuzzed
 const ovrMean=ovrs.length?ovrs.reduce((s,v)=>s+v,0)/ovrs.length:47;
 const ovrStd=(()=>{if(ovrs.length<2)return 10;const v=ovrs.reduce((s,x)=>s+Math.pow(x-ovrMean,2),0)/(ovrs.length-1);return Math.sqrt(v)||10;})();
 const zs=v=>(v-ovrMean)/ovrStd;
@@ -113,11 +113,13 @@ const capAmt=data.capSettings?.salaryCap||200000;
 const minC=data.capSettings?.minContract||500;const maxC=data.capSettings?.maxContract||30000;
 const difficulty=data.difficulty||0;
 const diffFudge=Math.max(0,1+0.1*difficulty);// Normal=1.0, Hard=1.1, Insane=1.2
-const fudge=1.05*diffFudge;// AI overvalues own players 5% + difficulty
+const fudgeAI=1.05*diffFudge;// AI-vs-AI: 5% overvalue + difficulty
+const fudgeUser=1.0*diffFudge;// User-vs-AI: only difficulty factor
 const MIN_VAL=-1,MAX_VAL=3;
 // Contract value (source: getContractValue)
 const contractVal=(amount,exp,normVal)=>{
 const season=data.season;if(!exp||exp<=season)return 0;
+if(data.phase>=4&&exp===season+1)return 0;// Source: post-playoff expiring next year = 0
 const sCap=capAmt||200000;const normAmount=amount/sCap;
 const slope=(maxC/sCap-minC/sCap)/(MAX_VAL-MIN_VAL);
 const expected=slope*(normVal-MIN_VAL);return Math.min(expected-normAmount,0.1);};
@@ -159,11 +161,11 @@ const otherWps=wps.filter(w=>w.tid!==tid);
 let rank=otherWps.findIndex(w=>wp<w.wp);if(rank===-1)rank=otherWps.length;
 return rank+1;};
 // Make player asset (source: getPlayers) - isRemove applies fudge
-const makePlayerAsset=(p,isRemove)=>{
+const makePlayerAsset=(p,isRemove,isUserTrade=true)=>{
 const trueVal=p.value||p.valueFuzz||0;
 let normVal=zs(trueVal);
 // Fudge: AI overvalues what it gives up (only positive values)
-if(isRemove&&normVal>0)normVal*=fudge;
+if(isRemove&&normVal>0)normVal*=(isUserTrade?fudgeUser:fudgeAI);
 const cv=contractVal(p.salary||0,p.expYear||0,zs(trueVal));
 // Injury discount (source)
 const inj=p.injury?.gamesRemaining||0;
@@ -171,6 +173,18 @@ let injDiscount=0;if(inj>75)injDiscount=0.75;else injDiscount=inj/100;
 const justDrafted=p.draftYear&&p.draftYear===data.season-1;
 return{val:normVal,cv,age:p.age,isPick:false,pid:p.pid,injDiscount,justDrafted,round:0};};
 // Make pick asset (source: getPickNumber + getPickInfo)
+// Rookie salaries (source: draft/getRookieSalaries.ts)
+const rookieSalaries=(()=>{const draftPct=10;const draftRounds=2;// football defaults
+const firstSal=Math.max(maxC*draftPct/100,minC);const excess=firstSal-minC;
+const nHigh=Math.round(numTeams/3);const nLow=numTeams*Math.min(draftRounds,data.numDraftRounds||7)-nHigh;
+const nNone=numTeams*(data.numDraftRounds||7)-nHigh-nLow;
+const hSlope=nHigh>1?-(excess/2)/(nHigh-1):-(excess/2);
+const plusOne=(data.numDraftRounds||7)>draftRounds?1:0;
+const lSlope=nLow>0?-(excess/2)/(nLow+plusOne):0;
+const sals=[firstSal];for(let i=1;i<nHigh;i++)sals.push(sals[sals.length-1]+hSlope);
+for(let i=0;i<nLow;i++)sals.push(sals[sals.length-1]+lSlope);
+for(let i=0;i<nNone;i++)sals.push(minC);
+return sals.map(s=>Math.round(s/10)*10);})();
 const makePickAsset=(dp,tid,tradingPartnerTid,pidsAdd,pidsRemove)=>{
 const season=dp.season||data.season;const nPR=numTeams;
 let estPick;
@@ -186,7 +200,7 @@ const usersPick=dp.tid===data.userTid;
 const regTarget=(usersPick?0.75:0.25)*nPR;
 let seasons=Math.max(0,Math.min(season-data.season,5));
 if(tradeWithUser&&seasons>0)seasons=Math.min(seasons+1,5);
-if(seasons===0)seasons+=0.5;
+if(seasons===0&&(data.phase<0||data.phase<3))seasons+=0.5;// Source: only before playoffs
 estPick=Math.round((estPick*(5-seasons))/5+(regTarget*seasons)/5);
 // User pick penalty / AI pick bonus when trading with user
 if(tradeWithUser&&seasons>0.5){
@@ -194,37 +208,40 @@ if(usersPick){const df=1+1.5*difficulty;estPick=Math.max(1,Math.min(Math.round((
 else{estPick=Math.max(1,Math.min(Math.round(estPick-nPR/3.5),nPR));}}}
 const pickNum=estPick+nPR*(dp.round-1);
 const rawVal=getPickVal(season,pickNum);
-return{val:zs(rawVal),cv:0,age:20,isPick:true,dpid:dp.dpid,round:dp.round,injDiscount:0,justDrafted:false};};
+const pickZs=zs(rawVal);const pickVal=Math.max(0.1,pickZs);// Source: "value of a draft pick can't be negative"
+const rookieSal=rookieSalaries[pickNum-1]||minC;
+const pickCv=Math.max(0,contractVal(rookieSal,season+2,pickZs));
+return{val:pickVal,cv:pickCv,age:20,isPick:true,dpid:dp.dpid,round:dp.round,injDiscount:0,justDrafted:false};};
 // Sum values with all factors (source: sumValues)
-const sumAssets=(assets,strategy,includeInjuries)=>{
+const sumAssets=(assets,strategy,includeInjuries,isUserTeam=false)=>{
 // First round pick protection
 const r1picks=assets.filter(a=>a.isPick&&a.round===1);const otherPicks=assets.filter(a=>a.isPick&&a.round>1);
 if(r1picks.length>2){const n=r1picks.length-2;r1picks.forEach(a=>{if(a.val>0)a.val*=1+n/SPORT_FACTOR;});}
 if(otherPicks.length>2){const n=otherPicks.length-2;otherPicks.forEach(a=>{if(a.val>0)a.val*=1+n/(SPORT_FACTOR*a.round);});}
 return assets.reduce((memo,a)=>{
 let pv=a.val;
-// Injury discount (only for incoming players)
-if(includeInjuries&&a.injDiscount>0)pv-=pv*a.injDiscount;
-// Negative values nearly worthless
-if(pv<0)pv/=20;
-// Contract value with strategy factor
-const cf=strategy==="rebuilding"?2:0.5;
-pv+=cf*a.cv;
-// justDrafted floor
-if(a.justDrafted)pv=Math.max(0,pv);
-// Strategy adjustments
+// 1. Strategy adjustments FIRST (source order)
 if(strategy==="rebuilding"){
 if(a.isPick)pv*=1.1;
-else if(a.age<=19)pv*=1.075;else if(a.age<=20)pv*=1.05;else if(a.age<=22)pv*=1.025;
+else if(a.age<=19)pv*=1.075;else if(a.age===20)pv*=1.05;else if(a.age===21)pv*=1.0375;else if(a.age===22)pv*=1.025;else if(a.age===23)pv*=1.0125;
 else if(a.age===27)pv*=0.975;else if(a.age===28)pv*=0.95;else if(a.age>=29)pv*=0.9;
 }else if(strategy==="contending"){
 if(a.isPick)pv*=0.825;
-else if(a.age<=19)pv*=0.8;else if(a.age<=20)pv*=0.825;else if(a.age<=21)pv*=0.85;
-else if(a.age<=22)pv*=0.875;else if(a.age<=23)pv*=0.925;else if(a.age<=24)pv*=0.95;}
-// EXPONENT
+else if(a.age<=19)pv*=0.8;else if(a.age===20)pv*=0.825;else if(a.age===21)pv*=0.85;
+else if(a.age===22)pv*=0.875;else if(a.age===23)pv*=0.925;else if(a.age===24)pv*=0.95;}
+// 2. Injury discount (source: only non-user teams, user knows what they have)
+if(includeInjuries&&!isUserTeam&&a.injDiscount>0)pv-=pv*a.injDiscount;
+// 3. Negative values nearly worthless
+if(pv<0)pv/=20;
+// 4. Contract value with strategy factor
+const cf=strategy==="rebuilding"?2:0.5;
+pv+=cf*a.cv;
+// 5. justDrafted floor
+if(!a.isPick&&a.justDrafted)pv=Math.max(0,pv);
+// 6. EXPONENT
 return memo+(pv>1?Math.pow(pv,TRADE_EXP):pv);
 },0);};
-return{ovrMean,ovrStd,zs,sumAssets,makePlayerAsset,makePickAsset,capAmt,fudge,estPicks,getModPickRank,difficulty};};
+return{ovrMean,ovrStd,zs,sumAssets,makePlayerAsset,makePickAsset,capAmt,fudgeAI,fudgeUser,estPicks,getModPickRank,difficulty};};
 
 // ─── MOCK DRAFT ENGINE ─────────────────────────────
 const INTERCEPT=-86.546;
@@ -297,10 +314,10 @@ const pos=r.pos||p.pos||"QB";const fz=r.fuzz||0;const ovr=bd(Math.round((r.ovr||
 return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,trueOvr,truePot,potGap:pot-ovr,ovrDiff:(trueOvr||0)-(ovr||0),potDiff:(truePot||0)-(pot||0),phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,value:p.value||p.valueFuzz||0,valueFuzz:p.valueFuzz||p.value||0,injury:p.injury||{type:"Healthy",gamesRemaining:0},rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
 let tl=tm.map(t=>{const s=t.seasons&&t.seasons.length>0?t.seasons[t.seasons.length-1]:null;return{tid:t.tid,name:`${t.region||""} ${t.name||""}`.trim(),abbrev:t.abbrev||`T${t.tid}`,won:s?s.won:0,lost:s?s.lost:0,strategy:t.strategy||"contending",seasons:t.seasons||[]};});
 if(!tl.length){const ts=[...new Set(pr.filter(p=>p.tid>=0).map(p=>p.tid))].sort((a,b)=>a-b);tl=ts.map(t=>({tid:t,name:`Team ${t}`,abbrev:`T${t}`,won:0,lost:0,strategy:"contending",seasons:[]}));}
-const difficulty=gA(raw.gameAttributes,"difficulty")??0;const numGames=gA(raw.gameAttributes,"numGames")||17;const numDraftRounds=gA(raw.gameAttributes,"numDraftRounds")||7;
+const difficulty=gA(raw.gameAttributes,"difficulty")??0;const phase=gA(raw.gameAttributes,"phase")??-1;const numGames=gA(raw.gameAttributes,"numGames")||17;const numDraftRounds=gA(raw.gameAttributes,"numDraftRounds")||7;
 const rawUtid=gA(raw.gameAttributes,"userTid");const userTid=typeof rawUtid==="number"?rawUtid:Array.isArray(rawUtid)?(typeof rawUtid[0]==="object"&&rawUtid[0]?.value!==undefined?rawUtid[0].value:rawUtid[0]):null;
 const rawUtids=gA(raw.gameAttributes,"userTids");const userTids=Array.isArray(rawUtids)?rawUtids:userTid!==null?[userTid]:[];
-return{players:pr,teams:tl,season:se,draftPicks:raw.draftPicks||[],difficulty,numGames,numDraftRounds,userTid:userTid,userTids,
+return{players:pr,teams:tl,season:se,draftPicks:raw.draftPicks||[],difficulty,phase,numGames,numDraftRounds,userTid:userTid,userTids,
 capSettings:{salaryCap:gA(raw.gameAttributes,"salaryCap")||200000,luxuryPayroll:gA(raw.gameAttributes,"luxuryPayroll")||230000,minPayroll:gA(raw.gameAttributes,"minPayroll")||150000,salaryCapType:gA(raw.gameAttributes,"salaryCapType")||"hard",minContract:gA(raw.gameAttributes,"minContract")||500,maxContract:gA(raw.gameAttributes,"maxContract")||30000}};};
 
 // ─── STYLES ─────────────────────────────────────────
@@ -321,6 +338,7 @@ const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
 const[tradeTid,setTradeTid]=useState(null);const[tradeMyPids,setTradeMyPids]=useState([]);const[tradeTheirPids,setTradeTheirPids]=useState([]);
 const[tradeMyDpids,setTradeMyDpids]=useState([]);const[tradeTheirDpids,setTradeTheirDpids]=useState([]);
 const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopFilter,setShopFilter]=useState("ALL");
+const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);};
 const[tSort,setTSort]=useState({my:{key:"ovr",dir:"desc"},their:{key:"ovr",dir:"desc"}});
 const fileRef=useRef(null);
 const $=dark?TH.dark:TH.light;
@@ -369,7 +387,7 @@ const top=fas.filter(p=>p.pos===n.pos).sort((a,b)=>b.ovr-a.ovr).slice(0,5);
 return{pos:n.pos,grade:n.g,gradeColor:n.c,diff:n.diff,avgOvr:n.avgOvr,la:n.la,players:top};
 }).filter(g=>g.players.length>0);},[data,pGr,nR]);
 
-const tEng=useMemo(()=>tradeCalc(data),[data]);
+const tEng=useMemo(()=>{if(!data)return null;const d={...data,userTid:data.userTid??myTid};return tradeCalc(d);},[data,myTid]);
 const projMap=useMemo(()=>{if(!data)return{};const m={};data.players.forEach(p=>{try{const pr=projectRatings(p.rt,p.age,3,progMode);m[p.pid]=pr[2]?.ovr||p.ovr;}catch(e){m[p.pid]=p.ovr;}});return m;},[data,progMode]);
 const p3=pid=>projMap[pid]||0;
 const tradeEval=useMemo(()=>{
@@ -425,7 +443,7 @@ const dvMe=tEng.sumAssets(myGetAs,myStrategy,true)-myLossVal;
 const retOvr=players.length?Math.max(...players.map(p=>p.ovr)):0;
 const fp=players[0];
 offers.push({team:t,players,picks,dvThem,dvMe,returnOvr:retOvr,
-returnPos:fp?fp.pos:"",returnPot:fp?fp.pot:0,returnAge:fp?fp.age:0,
+returnPos:fp?fp.pos:"",returnPot:fp?fp.pot:0,return3y:fp?p3(fp.pid):0,returnAge:fp?fp.age:0,
 returnSal:fp?fp.salary:0,returnYrs:fp?fp.yrsLeft:0,
 returnVal:fp?tEng.zs(fp.value||fp.valueFuzz||0):0});};
 // 1 player
@@ -1092,10 +1110,11 @@ return <div style={{display:"grid",gridTemplateColumns:hasCap?"repeat(4, 1fr)":"
 {capData&&capData.badContracts.length>0&&<div style={cs}>
 <div style={{fontSize:14,fontWeight:700,color:"#e74c3c",marginBottom:4}}>🔒 Bad Contracts<Tip text="≥$3M salary, ≥2 years left, projected OVR in 3y below 65. Higher salary + more decline + longer term = worse."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Expensive + projected below starter level</p>
-<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
-<MSH sec="bad" label="Name" sk="name"/><MSH sec="bad" label="Pos" sk="pos" align="center"/><MSH sec="bad" label="Age" sk="age" align="center"/><MSH sec="bad" label="OVR" sk="ovr" align="center"/><MSH sec="bad" label="→3y" sk="ovr3" align="center"/><MSH sec="bad" label="Pot" sk="pot" align="center"/><MSH sec="bad" label="Contract" sk="salary" align="right"/></div>
-{mSrt(capData.badContracts,"bad").map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="bad" label="Name" sk="name"/><span></span><MSH sec="bad" label="Pos" sk="pos" align="center"/><MSH sec="bad" label="Age" sk="age" align="center"/><MSH sec="bad" label="OVR" sk="ovr" align="center"/><MSH sec="bad" label="→3y" sk="ovr3" align="center"/><MSH sec="bad" label="Pot" sk="pot" align="center"/><MSH sec="bad" label="Contract" sk="salary" align="right"/></div>
+{mSrt(capData.badContracts,"bad").map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",whiteSpace:"nowrap"}}>Trade</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
@@ -1129,11 +1148,12 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 {capData&&<div style={cs}>
 <div style={{fontSize:14,fontWeight:700,color:"#f1c40f",marginBottom:4}}>📋 Extension Watch<Tip text="Expiring soon (≤1yr) + worth keeping (OVR ≥55) + not too old (≤30)."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Expiring soon + worth keeping (OVR ≥55, age ≤30)</p>
-{capData.extWatch.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
-<MSH sec="ext" label="Name" sk="name"/><MSH sec="ext" label="Pos" sk="pos" align="center"/><MSH sec="ext" label="Age" sk="age" align="center"/><MSH sec="ext" label="OVR" sk="ovr" align="center"/><MSH sec="ext" label="→3y" sk="ovr3" align="center"/><MSH sec="ext" label="Pot" sk="pot" align="center"/><MSH sec="ext" label="Contract" sk="salary" align="right"/></div>
+{capData.extWatch.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="ext" label="Name" sk="name"/><span></span><MSH sec="ext" label="Pos" sk="pos" align="center"/><MSH sec="ext" label="Age" sk="age" align="center"/><MSH sec="ext" label="OVR" sk="ovr" align="center"/><MSH sec="ext" label="→3y" sk="ovr3" align="center"/><MSH sec="ext" label="Pot" sk="pot" align="center"/><MSH sec="ext" label="Contract" sk="salary" align="right"/></div>
 {mSrt(capData.extWatch,"ext").map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;
-return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",whiteSpace:"nowrap"}}>Trade</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
@@ -1145,11 +1165,12 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 {capData&&capData.resignWatch&&capData.resignWatch.length>0&&<div style={cs}>
 <div style={{fontSize:14,fontWeight:700,color:"#3498db",marginBottom:4}}>🔄 Re-sign Watch<Tip text="KEEP = young+upside or elite. KEY = good starter. EVAL = borderline. PASS = not worth it."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Former team players now free agents. Projection shows expected OVR in 3 years.</p>
-<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="rsn" label="Name" sk="name"/><MSH sec="rsn" label="Pos" sk="pos" align="center"/><MSH sec="rsn" label="Age" sk="age" align="center"/><MSH sec="rsn" label="OVR" sk="ovr" align="center"/><MSH sec="rsn" label="→3y" sk="ovr3" align="center"/><MSH sec="rsn" label="Pot" sk="pot" align="center"/><span></span></div>
 {mSrt(capData.resignWatch,"rsn").map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;const cat=getCat(p,chg);
-return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",whiteSpace:"nowrap"}}>Trade</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
@@ -1161,11 +1182,12 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 {expP.length>0&&<div style={cs}>
 <div style={{fontSize:14,fontWeight:700,color:"#e67e22",marginBottom:4}}>⚠️ Expiring Contracts ({expP.length})<Tip text="KEEP = young+upside or elite. KEY = good starter. EVAL = depends on price. PASS = let walk."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Become free agents after season. Projection shows expected OVR in 3 years.</p>
-<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 48px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="exp" label="Name" sk="name"/><MSH sec="exp" label="Pos" sk="pos" align="center"/><MSH sec="exp" label="Age" sk="age" align="center"/><MSH sec="exp" label="OVR" sk="ovr" align="center"/><MSH sec="exp" label="→3y" sk="ovr3" align="center"/><MSH sec="exp" label="Pot" sk="pot" align="center"/><MSH sec="exp" label="Salary" sk="salary" align="right"/><span></span></div>
 {mSrt(expP,"exp").slice(0,15).map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;const cat=getCat(p,chg);
-return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 48px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 48px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",whiteSpace:"nowrap"}}>Trade</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
@@ -1179,11 +1201,12 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 <div style={cs}>
 <div style={{fontSize:14,fontWeight:700,color:"#e74c3c",marginBottom:4}}>🔻 Sell High<Tip text="Past peak with trade value. Speed pos (RB,WR,CB,S) decline after 27, IQ pos (QB,OL) after 30, all after 32."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Speed pos age 27+ · IQ pos age 30+ · All age 32+</p>
-{tr.sell.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
-<MSH sec="sell" label="Name" sk="name"/><MSH sec="sell" label="Pos" sk="pos" align="center"/><MSH sec="sell" label="Age" sk="age" align="center"/><MSH sec="sell" label="OVR" sk="ovr" align="center"/><MSH sec="sell" label="→3y" sk="ovr3" align="center"/><MSH sec="sell" label="Pot" sk="pot" align="center"/><MSH sec="sell" label="Contract" sk="salary" align="right"/><span></span></div>
+{tr.sell.length>0?<><div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 58px 36px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="sell" label="Name" sk="name"/><span></span><MSH sec="sell" label="Pos" sk="pos" align="center"/><MSH sec="sell" label="Age" sk="age" align="center"/><MSH sec="sell" label="OVR" sk="ovr" align="center"/><MSH sec="sell" label="→3y" sk="ovr3" align="center"/><MSH sec="sell" label="Pot" sk="pot" align="center"/><MSH sec="sell" label="Contract" sk="salary" align="right"/><span></span></div>
 {mSrt(tr.sell,"sell").map((p,i)=>{const ovr3=p3(p.pid);const chg=ovr3-p.ovr;
-return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 58px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 58px 36px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",whiteSpace:"nowrap"}}>Trade</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
@@ -1196,10 +1219,11 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 {capData&&capData.cuts.length>0&&<div style={cs}>
 <div style={{fontSize:14,fontWeight:700,color:"#e67e22",marginBottom:4}}>🔄 Trade Candidates<Tip text="OVR below position avg + ≥$2M salary. Releasing doesn't free cap in FBGM — trade to get salary off books."/></div>
 <p style={{fontSize:9,color:$.t4,margin:"0 0 6px"}}>Below position avg — trade to free salary</p>
-<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 40px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<div style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 40px 58px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
 <MSH sec="trade" label="Name" sk="name"/><MSH sec="trade" label="Pos" sk="pos" align="center"/><MSH sec="trade" label="Age" sk="age" align="center"/><MSH sec="trade" label="OVR" sk="ovr" align="center"/><MSH sec="trade" label="→3y" sk="ovr3" align="center"/><MSH sec="trade" label="Pot" sk="pot" align="center"/><MSH sec="trade" label="vs ø" sk="posAvgOvr" align="center"/><MSH sec="trade" label="Contract" sk="salary" align="right"/></div>
-{mSrt(capData.cuts,"trade").map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 24px 32px 44px 28px 40px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
+{mSrt(capData.cuts,"trade").map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 34px 28px 24px 32px 44px 28px 40px 58px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,background:i%2===0?$.row:"transparent",borderRadius:4}}>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",whiteSpace:"nowrap"}}>Trade</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
@@ -1242,7 +1266,7 @@ return <div key={pos} style={{marginBottom:10}}>
 </div>}
 </>}
 
-{tab==="trades"&&<div style={{maxWidth:960,margin:"0 auto"}}>
+{tab==="trades"&&<div style={{maxWidth:1800,margin:"0 auto"}}>
 {(()=>{
 const sortP=(arr,side)=>{const s=tSort[side];return[...arr].sort((a,b)=>{const k=s.key,d=s.dir;if(k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));
 if(k==="name"){const la=(a.name||"").split(" ").slice(-1)[0];const lb=(b.name||"").split(" ").slice(-1)[0];return d==="asc"?la.localeCompare(lb):lb.localeCompare(la);}const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});};
@@ -1279,9 +1303,9 @@ const myDPs=(data.draftPicks||[]).filter(d=>d.tid===myTid).sort((a,b)=>a.season-
 const theirDPs=(data.draftPicks||[]).filter(d=>d.tid===tradeTid).sort((a,b)=>a.season-b.season||a.round-b.round);
 const togglePid=(pid,list,setter)=>setter(l=>l.includes(pid)?l.filter(x=>x!==pid):[...l,pid]);
 const toggleDpid=(dpid,list,setter)=>setter(l=>l.includes(dpid)?l.filter(x=>x!==dpid):[...l,dpid]);
-const grid="20px minmax(80px,1fr) 26px 28px 26px 28px 22px 40px 32px";
+const grid="16px minmax(130px,1fr) 22px 26px 22px 24px 22px 40px 26px";
 return <>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:12}}>
 <div style={cs}>
 <div style={{fontSize:13,fontWeight:700,color:$.t8,marginBottom:2}}>{data.teams.find(t=>t.tid===myTid)?.name}</div>
 {tEng&&tEng.capAmt>0&&<div style={{fontSize:9,color:tradeEval&&tradeEval.myCapAfter>tEng.capAmt?"#e74c3c":"#3498db",marginBottom:4,...M}}>Cap: {fS(data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0))} / {fS(tEng.capAmt)}{tradeEval?` → ${fS(tradeEval.myCapAfter)}`+((tradeEval.myCapAfter>tEng.capAmt)?" ⚠ OVER CAP":""):""}</div>}
@@ -1291,7 +1315,7 @@ return <>
 {sortP(myP.map(p=>({...p,tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"my").map(p=><div key={p.pid} onClick={()=>togglePid(p.pid,tradeMyPids,setTradeMyPids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:tradeMyPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",border:tradeMyPids.includes(p.pid)?"1px solid rgba(230,57,70,0.3)":"1px solid transparent"}}>
 <span style={{fontSize:10,color:tradeMyPids.includes(p.pid)?"#e63946":$.t3}}>{tradeMyPids.includes(p.pid)?"✓":"○"}</span>
-<span style={{fontWeight:600,color:tradeMyPids.includes(p.pid)?"#e63946":$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{fontWeight:600,color:tradeMyPids.includes(p.pid)?"#e63946":$.t,whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
 <span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
@@ -1319,7 +1343,7 @@ background:tradeMyDpids.includes(dp.dpid)?"rgba(230,57,70,0.12)":"rgba(241,196,1
 {sortP(otherP.map(p=>({...p,tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"their").map(p=><div key={p.pid} onClick={()=>togglePid(p.pid,tradeTheirPids,setTradeTheirPids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:tradeTheirPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",border:tradeTheirPids.includes(p.pid)?"1px solid rgba(230,57,70,0.3)":"1px solid transparent"}}>
 <span style={{fontSize:10,color:tradeTheirPids.includes(p.pid)?"#e63946":$.t3}}>{tradeTheirPids.includes(p.pid)?"✓":"○"}</span>
-<span style={{fontWeight:600,color:tradeTheirPids.includes(p.pid)?"#e63946":$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{fontWeight:600,color:tradeTheirPids.includes(p.pid)?"#e63946":$.t,whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
 <span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
@@ -1354,6 +1378,9 @@ background:tradeTheirDpids.includes(dp.dpid)?"rgba(230,57,70,0.12)":"rgba(241,19
 <div style={{display:"flex",justifyContent:"center",gap:2,marginTop:4,fontSize:8,color:$.t3}}>
 <span>Crazy</span><span style={{flex:1}}></span><span>Rejected</span><span style={{flex:1}}></span><span>Close</span><span style={{flex:1}}></span><span>Accepted</span>
 </div>
+<div style={{marginTop:10,padding:"6px 10px",borderRadius:5,fontSize:10,color:tradeEval.dv>1?"#2ecc71":tradeEval.dv>0.3?"#f1c40f":"#e67e22",background:tradeEval.dv>1?"rgba(46,204,113,0.08)":tradeEval.dv>0.3?"rgba(241,196,15,0.08)":"rgba(230,126,34,0.08)",...M}}>
+{tradeEval.dv>1?"High confidence — very likely to go through in-game":tradeEval.dv>0.3?"Probable — should work, but not guaranteed":tradeEval.dv>0?"Borderline — could go either way in-game due to rounding differences":tradeEval.dv>-1?"Unlikely — AI will probably reject this":"No chance — way too lopsided"}
+</div>
 </div>}
 </>;})()}
 </>}
@@ -1372,7 +1399,7 @@ if(k==="team")return d==="asc"?a.team.abbrev.localeCompare(b.team.abbrev):b.team
 if(k==="returnPos")return d==="asc"?(a.returnPos||"").localeCompare(b.returnPos||""):(b.returnPos||"").localeCompare(a.returnPos||"");
 const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
 const OfH=({label,sk,align})=>{const s=offerSort;const a=s.key===sk;return <span onClick={()=>setMSort(ms=>({...ms,offers:{key:sk,dir:ms.offers?.key===sk&&ms.offers?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:9,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
-const grid2="20px minmax(50px,1fr) 26px 28px 26px 28px 22px 40px 24px 30px";
+const grid2="18px 1fr 24px 28px 24px 26px 22px 42px 22px 28px";
 
 return <>
 <div style={cs}>
@@ -1382,9 +1409,9 @@ return <>
 </div>
 {(!data.draftPicks||data.draftPicks.length===0)&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,fontSize:11,color:"#e74c3c",marginBottom:8}}>⚠ No draft picks in export. Re-export with <strong>Draft Picks</strong> and <strong>League Settings</strong> checked, or use the Quick Export bookmarklet.</div>}
 
-<div style={{display:"grid",gridTemplateColumns:grid2,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
+<div style={{maxHeight:280,overflowY:"auto"}}>
+<div style={{display:"grid",gridTemplateColumns:grid2,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4,borderLeft:"3px solid transparent",position:"sticky",top:0,zIndex:1,background:$.card}}>
 <span></span><MSH sec="shop" label="Name" sk="name"/><MSH sec="shop" label="Pos" sk="pos" align="center"/><MSH sec="shop" label="OVR" sk="ovr" align="center"/><MSH sec="shop" label="Pot" sk="pot" align="center"/><MSH sec="shop" label="→3y" sk="ovr3" align="center"/><MSH sec="shop" label="Age" sk="age" align="center"/><MSH sec="shop" label="Salary" sk="salary" align="right"/><span style={{textAlign:"center",fontSize:9}}>Yrs</span><MSH sec="shop" label="Val" sk="tradeVal" align="right"/></div>
-<div style={{maxHeight:260,overflowY:"auto"}}>
 {mSrt(myP.map(p=>({...p,ovr3:p3(p.pid),tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"shop").map(p=><div key={p.pid} onClick={()=>toggleShopPid(p.pid)} style={{display:"grid",gridTemplateColumns:grid2,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:shopPids.includes(p.pid)?"rgba(230,57,70,0.15)":"transparent",borderLeft:shopPids.includes(p.pid)?"3px solid #e63946":"3px solid transparent"}}>
 <span style={{fontSize:10,color:shopPids.includes(p.pid)?"#e63946":$.t3}}>{shopPids.includes(p.pid)?"✓":"○"}</span>
@@ -1424,8 +1451,8 @@ Offers for {[...shopPids.map(pid=>{const p=data.players.find(x=>x.pid===pid);ret
 {shopOffers.length===0&&<div style={{color:$.t4,fontSize:12,padding:8}}>No viable trade offers found{shopFilter!=="ALL"?" for this filter":""}.</div>}
 
 {shopOffers.length>0&&<>
-<div style={{display:"grid",gridTemplateColumns:"36px minmax(45px,1fr) 26px 26px 26px 26px 22px 38px 24px 30px 36px 30px",gap:3,padding:"0 4px",marginBottom:4,fontSize:9,color:$.t4}}>
-<OfH label="Team" sk="team" align="center"/><span style={{fontSize:9,color:$.t4}}>Return</span><OfH label="Pos" sk="returnPos" align="center"/><OfH label="OVR" sk="returnOvr" align="center"/><OfH label="Pot" sk="returnPot" align="center"/><OfH label="→3y" sk="return3y" align="center"/><OfH label="Age" sk="returnAge" align="center"/><OfH label="Sal" sk="returnSal" align="right"/><OfH label="Yrs" sk="returnYrs" align="center"/><OfH label="Val" sk="returnVal" align="center"/><OfH label="Deal" sk="dvMe" align="center"/><OfH label="dv" sk="dvThem" align="center"/></div>
+<div style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",gap:3,padding:"0 4px",marginBottom:4,fontSize:9,color:$.t4}}>
+<OfH label="Team" sk="team" align="center"/><span style={{fontSize:9,color:$.t4}}>Return</span><OfH label="Pos" sk="returnPos" align="center"/><OfH label="OVR" sk="returnOvr" align="center"/><OfH label="Pot" sk="returnPot" align="center"/><OfH label="→3y" sk="return3y" align="center"/><OfH label="Age" sk="returnAge" align="center"/><OfH label="Sal" sk="returnSal" align="right"/><OfH label="Yrs" sk="returnYrs" align="center"/><OfH label="Val" sk="returnVal" align="center"/><OfH label="Deal" sk="dvThem" align="center"/><OfH label="dv" sk="dvThem" align="center"/></div>
 {sortedOffers.map((o,i)=>{const team=o.team;
 const myTotalSal=data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0);
 const theirTotalSal=data.players.filter(p=>p.tid===team.tid).reduce((s,p)=>s+p.salary,0);
@@ -1435,7 +1462,7 @@ const myCapAfter=myTotalSal-shopSalOut+offerSalIn;
 const theirCapAfter=theirTotalSal-offerSalIn+shopSalOut;
 const capOver=tEng&&tEng.capAmt>0&&(myCapAfter>tEng.capAmt||theirCapAfter>tEng.capAmt);
 return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent",padding:"2px 0",opacity:capOver?0.6:1}}>
-{o.players.map((p,pi)=>{const pp3=p3(p.pid);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"36px minmax(45px,1fr) 26px 26px 26px 26px 22px 38px 24px 30px 36px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
+{o.players.map((p,pi)=>{const pp3=p3(p.pid);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
 <span style={{...M,fontWeight:700,fontSize:10,color:$.t,textAlign:"center"}}>{pi===0?team.abbrev:""}</span>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -1446,17 +1473,17 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>}
-{pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:capOver?"#e74c3c":o.dvMe>0?"#2ecc71":"#f1c40f",background:capOver?"rgba(231,76,60,0.12)":o.dvMe>0?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{capOver?"Cap!":o.dvMe>0?"Good":"Fair"}</span>}
+{pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:capOver?"#e74c3c":o.dvThem>1?"#2ecc71":o.dvThem>0.3?"#2ecc71":o.dvThem>0?"#f1c40f":"#e67e22",background:capOver?"rgba(231,76,60,0.12)":o.dvThem>0.3?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{capOver?"Cap!":o.dvThem>1?"Sure ✅":o.dvThem>0.3?"Likely":o.dvThem>0?"Maybe ⚠":"Risky"}</span>}
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{o.dvThem.toFixed(1)}</span>}
 {pi>0&&<span/>}{pi>0&&<span/>}{pi>0&&<span/>}
 </div>;})}
-{o.picks.map((dp,di)=><div key={dp.dpid} style={{display:"grid",gridTemplateColumns:"36px minmax(45px,1fr) 26px 26px 26px 26px 22px 38px 24px 30px 36px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
+{o.picks.map((dp,di)=><div key={dp.dpid} style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
 <span style={{...M,fontWeight:700,fontSize:10,color:$.t,textAlign:"center"}}>{o.players.length===0&&di===0?team.abbrev:""}</span>
 <span style={{color:"#f1c40f",fontWeight:600}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}</span>
 <span style={{...M,fontSize:8,color:"#f1c40f",textAlign:"center"}}>PICK</span>
 <span/><span/><span/><span/><span/><span/>
 {o.players.length===0&&di===0&&<span style={{...M,fontSize:9,color:"#f1c40f",textAlign:"center"}}>{tEng?(()=>{const a=tEng.makePickAsset(dp,o.team.tid,myTid,[],[]);return a.val.toFixed(1);})():""}</span>}
-{o.players.length===0&&di===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:o.dvMe>0?"#2ecc71":"#f1c40f",background:o.dvMe>0?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{o.dvMe>0?"Good":"Fair"}</span>}
+{o.players.length===0&&di===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:o.dvThem>1?"#2ecc71":o.dvThem>0.3?"#2ecc71":o.dvThem>0?"#f1c40f":"#e67e22",background:o.dvThem>0.3?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{o.dvThem>1?"Sure ✅":o.dvThem>0.3?"Likely":o.dvThem>0?"Maybe ⚠":"Risky"}</span>}
 {o.players.length===0&&di===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{o.dvThem.toFixed(1)}</span>}
 {(o.players.length>0||di>0)&&<span/>}{(o.players.length>0||di>0)&&<span/>}{(o.players.length>0||di>0)&&<span/>}
 </div>)}
@@ -1622,7 +1649,7 @@ return <div key={ph.l} style={{padding:"8px 12px",borderRadius:8,background:$.ro
 </div>
 
 {/* Risk & Opportunity */}
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:12}}>
 <div style={cs}>
 <div style={{fontSize:14,fontWeight:700,color:"#e74c3c",marginBottom:6}}>🔻 Biggest Drops (3y)</div>
 {agingData.drops.length>0?agingData.drops.map((p,i)=><div key={p.pid} style={{display:"flex",alignItems:"center",gap:5,padding:"4px 0",fontSize:12}}>
