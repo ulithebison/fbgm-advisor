@@ -109,7 +109,7 @@ const ovrs=allP.map(p=>p.ovr);
 const ovrMean=ovrs.length?ovrs.reduce((s,v)=>s+v,0)/ovrs.length:47;
 const ovrStd=(()=>{if(ovrs.length<2)return 10;const v=ovrs.reduce((s,x)=>s+Math.pow(x-ovrMean,2),0)/(ovrs.length-1);return Math.sqrt(v)||10;})();
 const zs=v=>(v-ovrMean)/ovrStd;
-const capAmt=data.capSettings?.salaryCap||0;
+const capAmt=data.capSettings?.salaryCap||200000;
 const minC=data.capSettings?.minContract||500;const maxC=data.capSettings?.maxContract||30000;
 const difficulty=data.difficulty||0;
 const diffFudge=Math.max(0,1+0.1*difficulty);// Normal=1.0, Hard=1.1, Insane=1.2
@@ -240,7 +240,7 @@ mov+=wt*v;}}return mov;};
 const runMock=(data,season,myTid)=>{
 if(!data)return[];
 const prospects=data.players.filter(p=>p.tid===-2&&(!p.draftYear||p.draftYear===season))
-.map(p=>({pid:p.pid,name:p.name,pos:p.pos,ovr:p.ovr,pot:p.pot,val:p.valueFuzz||p.value||0,potGap:p.potGap}))
+.map(p=>({pid:p.pid,name:p.name,pos:p.pos,ovr:p.ovr,pot:p.pot,val:p.valueFuzz||p.value||0,potGap:p.potGap,ovrDiff:p.ovrDiff||0,potDiff:p.potDiff||0}))
 .sort((a,b)=>b.val-a.val);
 const rosters={};data.teams.forEach(t=>{rosters[t.tid]=data.players.filter(p=>p.tid===t.tid).map(p=>({pos:p.pos,val:p.valueFuzz||p.value||0}));});
 const standingSorted=[...data.teams].sort((a,b)=>(a.won||0)-(b.won||0)||((b.lost||0)-(a.lost||0)));
@@ -293,20 +293,20 @@ const pD=js=>{const raw=JSON.parse(js);let pl,tm,se;const gA=(g,k)=>{if(!g)retur
 if(Array.isArray(raw)){pl=raw;tm=[];se=new Date().getFullYear();}else if(raw.players){pl=raw.players;tm=raw.teams||[];se=gA(raw.gameAttributes,"season")||raw.startingSeason||new Date().getFullYear();}else throw new Error("Unknown format");
 pl=pl.filter(p=>p.tid===undefined||p.tid>=-2);
 const pr=pl.map(p=>{const r=p.ratings&&p.ratings.length>0?p.ratings[p.ratings.length-1]:null;if(!r)return null;const rt={};RK.forEach(k=>rt[k]=r[k]||0);rt.pos=r.pos||p.pos||"QB";const age=p.born?se-p.born.year:25;const ct=p.contract||{};const sal=ct.amount||0;const exp=ct.exp||0;const yl=exp?exp-se:0;
-const pos=r.pos||p.pos||"QB";const fz=r.fuzz||0;const ovr=bd(Math.round((r.ovr||0)+fz),0,100);const pot=bd(Math.round((r.pot||ovr)+fz),0,100);
-return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,potGap:pot-ovr,phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,value:p.value||p.valueFuzz||0,valueFuzz:p.valueFuzz||p.value||0,injury:p.injury||{type:"Healthy",gamesRemaining:0},rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
+const pos=r.pos||p.pos||"QB";const fz=r.fuzz||0;const ovr=bd(Math.round((r.ovr||0)+fz),0,100);const pot=bd(Math.round((r.pot||ovr)+fz),0,100);const trueOvr=bd(Math.round(r.ovr||0),0,100);const truePot=bd(Math.round(r.pot||r.ovr||0),0,100);
+return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,trueOvr,truePot,potGap:pot-ovr,ovrDiff:(trueOvr||0)-(ovr||0),potDiff:(truePot||0)-(pot||0),phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,value:p.value||p.valueFuzz||0,valueFuzz:p.valueFuzz||p.value||0,injury:p.injury||{type:"Healthy",gamesRemaining:0},rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
 let tl=tm.map(t=>{const s=t.seasons&&t.seasons.length>0?t.seasons[t.seasons.length-1]:null;return{tid:t.tid,name:`${t.region||""} ${t.name||""}`.trim(),abbrev:t.abbrev||`T${t.tid}`,won:s?s.won:0,lost:s?s.lost:0,strategy:t.strategy||"contending",seasons:t.seasons||[]};});
 if(!tl.length){const ts=[...new Set(pr.filter(p=>p.tid>=0).map(p=>p.tid))].sort((a,b)=>a-b);tl=ts.map(t=>({tid:t,name:`Team ${t}`,abbrev:`T${t}`,won:0,lost:0,strategy:"contending",seasons:[]}));}
-const difficulty=gA(raw.gameAttributes,"difficulty")||0;const numGames=gA(raw.gameAttributes,"numGames")||17;const numDraftRounds=gA(raw.gameAttributes,"numDraftRounds")||7;
+const difficulty=gA(raw.gameAttributes,"difficulty")??0;const numGames=gA(raw.gameAttributes,"numGames")||17;const numDraftRounds=gA(raw.gameAttributes,"numDraftRounds")||7;
 const rawUtid=gA(raw.gameAttributes,"userTid");const userTid=typeof rawUtid==="number"?rawUtid:Array.isArray(rawUtid)?(typeof rawUtid[0]==="object"&&rawUtid[0]?.value!==undefined?rawUtid[0].value:rawUtid[0]):null;
 const rawUtids=gA(raw.gameAttributes,"userTids");const userTids=Array.isArray(rawUtids)?rawUtids:userTid!==null?[userTid]:[];
 return{players:pr,teams:tl,season:se,draftPicks:raw.draftPicks||[],difficulty,numGames,numDraftRounds,userTid:userTid,userTids,
-capSettings:{salaryCap:gA(raw.gameAttributes,"salaryCap")||0,luxuryPayroll:gA(raw.gameAttributes,"luxuryPayroll")||0,minPayroll:gA(raw.gameAttributes,"minPayroll")||0,salaryCapType:gA(raw.gameAttributes,"salaryCapType")||"",minContract:gA(raw.gameAttributes,"minContract")||500,maxContract:gA(raw.gameAttributes,"maxContract")||30000}};};
+capSettings:{salaryCap:gA(raw.gameAttributes,"salaryCap")||200000,luxuryPayroll:gA(raw.gameAttributes,"luxuryPayroll")||230000,minPayroll:gA(raw.gameAttributes,"minPayroll")||150000,salaryCapType:gA(raw.gameAttributes,"salaryCapType")||"hard",minContract:gA(raw.gameAttributes,"minContract")||500,maxContract:gA(raw.gameAttributes,"maxContract")||30000}};};
 
 // ─── STYLES ─────────────────────────────────────────
 const M={fontFamily:"'JetBrains Mono',monospace"};
 const H={fontFamily:"'Anybody',sans-serif",fontWeight:800};
-const GR={roster:"minmax(100px,1fr) 32px 28px 34px 38px 38px 56px 32px",fa:"minmax(100px,1fr) 32px 28px 34px 38px 38px 56px",draft:"minmax(100px,1fr) 32px 28px 36px 38px 38px 36px"};
+const GR={roster:"minmax(100px,1fr) 32px 28px 34px 38px 38px 56px 32px",fa:"minmax(100px,1fr) 32px 28px 34px 38px 38px 56px",draft:"minmax(90px,1fr) 32px 28px 36px 34px 24px 34px 24px"};
 const TABS=[{id:"depth",label:"Roster"},{id:"grades",label:"Grades"},{id:"draft",label:"Draft"},{id:"moves",label:"Moves"},{id:"trades",label:"Trades"},{id:"compare",label:"Compare"},{id:"aging",label:"Aging"}];
 
 function App(){
@@ -564,20 +564,22 @@ const SH=({label,sk,align})=>{const a=sort.key===sk;return <span onClick={()=>oS
 
 const MSH=({sec,label,sk,align})=>{const s=mSort[sec]||{key:"ovr",dir:"desc"};const a=s.key===sk;return <span onClick={()=>setMSort(ms=>({...ms,[sec]:{key:sk,dir:ms[sec]?.key===sk&&ms[sec]?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:10,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
 
-const mSrt=(arr,sec)=>{const s=mSort[sec];if(!s)return arr;return[...arr].sort((a,b)=>{const k=s.key,d=s.dir;if(k==="name"||k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});};
+const mSrt=(arr,sec)=>{const s=mSort[sec];if(!s)return arr;return[...arr].sort((a,b)=>{const k=s.key,d=s.dir;if(k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));
+if(k==="name"){const la=(a.name||"").split(" ").slice(-1)[0];const lb=(b.name||"").split(" ").slice(-1)[0];return d==="asc"?la.localeCompare(lb):lb.localeCompare(la);}const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});};
 
 const PR=({p,i,mode,isNeed})=>{const c=PC[p.pos]||"#888";const ie=mode==="roster"&&p.expiring;return(
-<div style={{display:"grid",gridTemplateColumns:GR[mode],alignItems:"center",gap:4,padding:"6px 7px",background:isNeed?$.need:ie?$.exp:i%2===0?$.row:"transparent",borderRadius:5,fontSize:12,borderLeft:isNeed?"2px solid #2ecc71":ie?"2px solid #e74c3c":"2px solid transparent"}}>
-<span onClick={()=>setSelP(p)} style={{fontWeight:600,color:$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}{ie&&<span style={{fontSize:9,color:"#e74c3c",marginLeft:3}}>⚠️</span>}{isNeed&&<span style={{fontSize:9,color:"#2ecc71",marginLeft:3,...M}}>NEED</span>}</span>
+<div style={{display:"grid",gridTemplateColumns:GR[mode],alignItems:"center",gap:4,padding:"6px 7px",background:ie?$.exp:i%2===0?$.row:"transparent",borderRadius:5,fontSize:12,borderLeft:ie?"2px solid #e74c3c":"2px solid transparent"}}>
+<span onClick={()=>setSelP(p)} style={{fontWeight:600,color:$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}{ie&&<span style={{fontSize:9,color:"#e74c3c",marginLeft:3}}>⚠️</span>}</span>
 <span style={{...M,fontWeight:700,color:c,fontSize:10,textAlign:"center"}}>{p.pos}</span>
 <span style={{color:$.t7,textAlign:"center",fontSize:11}}>{p.age}</span>
 {mode==="draft"?<span style={{...M,fontSize:11,fontWeight:700,color:p.draftRank<=10?"#f1c40f":p.draftRank<=32?$.t8:$.t4,textAlign:"center"}}>#{p.draftRank}</span>:<span style={{fontSize:11,color:p.phase.c,textAlign:"center"}}>{p.phase.e}</span>}
 <span style={{...M,fontWeight:700,color:$.t0,fontSize:13,textAlign:"center"}}>{p.ovr}</span>
+{mode==="draft"&&<span style={{...M,fontSize:10,fontWeight:700,color:(p.trueOvr||p.ovr)>p.ovr?"#2ecc71":(p.trueOvr||p.ovr)<p.ovr?"#e74c3c":$.t3,textAlign:"center"}}>{(p.trueOvr||p.ovr)-p.ovr>0?"+"+(p.trueOvr-p.ovr):(p.trueOvr||p.ovr)-p.ovr<0?""+(p.trueOvr-p.ovr):""}</span>}
 <span style={{...M,fontWeight:600,color:p.potGap>=15?"#2ecc71":p.potGap>=8?"#f1c40f":$.t6,fontSize:12,textAlign:"center"}}>{p.pot}</span>
+{mode==="draft"&&<span style={{...M,fontSize:10,fontWeight:700,color:(p.truePot||p.pot)>p.pot?"#2ecc71":(p.truePot||p.pot)<p.pot?"#e74c3c":$.t3,textAlign:"center"}}>{(p.truePot||p.pot)-p.pot>0?"+"+(p.truePot-p.pot):(p.truePot||p.pot)-p.pot<0?""+(p.truePot-p.pot):""}</span>}
 {mode==="roster"&&<span style={{...M,fontSize:10,color:ie?"#e74c3c":$.t5,textAlign:"right"}}>{fS(p.salary)}</span>}
 {mode==="roster"&&<span style={{...M,fontSize:10,color:ie?"#e74c3c":p.yrsLeft<=1?"#e67e22":$.t4,textAlign:"center"}}>{p.yrsLeft>0?`${p.yrsLeft}y`:p.expYear?"exp":"–"}</span>}
 {mode==="fa"&&<span style={{...M,fontSize:10,color:$.t5,textAlign:"right"}}>{fS(p.salary)}</span>}
-{mode==="draft"&&<span style={{...M,fontSize:10,color:p.potGap>=15?"#2ecc71":p.potGap>=8?"#f1c40f":$.t3,textAlign:"center"}}>+{p.potGap}</span>}
 </div>);};
 
 const PlayerDetail=({p,onClose})=>{
@@ -903,6 +905,34 @@ background:!h.onTeam?"rgba(231,76,60,0.05)":"transparent",borderRadius:4}}>
 </div>)}
 </div>)}
 </div>
+{/* Sleeper / Dark Horse */}
+{dps.length>0&&(()=>{
+const curYear=data.season;
+const sleepers=dps.filter(p=>p.value&&p.valueFuzz&&(p.value-p.valueFuzz)>3&&(p.draftYear===curYear||!p.draftYear))
+.map(p=>{const diff=Math.round(p.value-p.valueFuzz);const ovrDiff=p.trueOvr-p.ovr;const potDiff=p.truePot-p.pot;
+const totalDiff=Math.max(diff,ovrDiff,potDiff);const tier=totalDiff>=15?"🔥 High":totalDiff>=8?"⚡ Moderate":"💤 Low";
+const tierColor=totalDiff>=15?"#e63946":totalDiff>=8?"#f1c40f":"#3498db";
+return{...p,sleepDiff:diff,ovrDiff,potDiff,tier,tierColor};})
+.sort((a,b)=>b.sleepDiff-a.sleepDiff).slice(0,20);
+if(!sleepers.length)return null;
+return <div style={cs}>
+<div style={{fontSize:14,fontWeight:700,color:$.t8,marginBottom:4}}>🕵️ Sleeper Alert — {curYear} Draft<Tip text="Players whose true ability is significantly higher than what scouts see (fuzz). High sleepers are hidden gems that the AI will undervalue in the draft. The Sleeper Score shows how much better they really are."/></div>
+<p style={{fontSize:10,color:$.t4,margin:"0 0 8px"}}>Hidden gems in this year's draft the AI will undervalue. Higher score = bigger gap between real talent and perceived talent.</p>
+<div style={{display:"grid",gridTemplateColumns:"minmax(70px,1fr) 26px 32px 36px 32px 36px 32px 50px 60px",gap:4,padding:"0 4px",marginBottom:4,fontSize:10,color:$.t4}}>
+<MSH sec="sleeper" label="Name" sk="name"/><MSH sec="sleeper" label="Pos" sk="pos" align="center"/><MSH sec="sleeper" label="Pick" sk="draftRank" align="center"/><MSH sec="sleeper" label="OVR" sk="ovr" align="center"/><MSH sec="sleeper" label="" sk="ovrDiff" align="center"/><MSH sec="sleeper" label="POT" sk="pot" align="center"/><MSH sec="sleeper" label="" sk="potDiff" align="center"/><MSH sec="sleeper" label="Tier" sk="sleepDiff" align="center"/><span></span></div>
+{mSrt(sleepers,"sleeper").map((p,i)=><div key={p.pid} onClick={()=>setSelP(p)} style={{display:"grid",gridTemplateColumns:"minmax(70px,1fr) 26px 32px 36px 32px 36px 32px 50px 60px",alignItems:"center",gap:4,padding:"4px 4px",fontSize:11,cursor:"pointer",borderRadius:4,background:i%2===0?$.row:"transparent"}}>
+<span style={{color:$.t,fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
+<span style={{...M,fontWeight:600,color:$.t5,textAlign:"center"}}>~{p.draftRank||"?"}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
+<span style={{...M,fontWeight:700,color:p.ovrDiff>0?"#2ecc71":p.ovrDiff<0?"#e74c3c":$.t4,textAlign:"center"}}>{p.ovrDiff>0?"+":""}{p.ovrDiff}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontWeight:700,color:p.potDiff>0?"#2ecc71":p.potDiff<0?"#e74c3c":$.t4,textAlign:"center"}}>{p.potDiff>0?"+":""}{p.potDiff}</span>
+<span style={{...M,fontSize:10,color:p.tierColor,textAlign:"center"}}>{p.tier}</span>
+<div style={{height:6,background:$.bar,borderRadius:3,overflow:"hidden"}}><div style={{width:`${Math.min(Math.max(p.ovrDiff,p.potDiff)*5,100)}%`,height:"100%",background:p.tierColor,borderRadius:3}}/></div>
+</div>)}
+</div>;})()}
+
 {/* Mock Draft */}
 <div style={cs}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -913,9 +943,11 @@ background:!h.onTeam?"rgba(231,76,60,0.05)":"transparent",borderRadius:4}}>
 </div>
 <p style={{fontSize:10,color:$.t4,margin:"0 0 8px",lineHeight:1.5}}>Simulates all rounds using the game's AI algorithm: each CPU team picks the prospect that improves their team OVR the most. Your picks are highlighted.</p>
 {mockRes&&<div>
+<div style={{display:"grid",gridTemplateColumns:"28px 50px minmax(80px,1fr) 38px 32px 32px 24px 32px 24px",gap:4,padding:"2px 6px",fontSize:9,color:$.t4}}>
+<span>#</span><span>Team</span><span>Name</span><span></span><span style={{textAlign:"center"}}>Pos</span><span style={{textAlign:"center"}}>OVR</span><span style={{textAlign:"center"}}>+/-</span><span style={{textAlign:"center"}}>Pot</span><span style={{textAlign:"center"}}>+/-</span></div>
 {mockRes.map((r,idx)=><React.Fragment key={r.pick}>
 {(idx===0||r.round!==mockRes[idx-1].round)&&<div style={{padding:"6px 0 3px",fontSize:12,fontWeight:700,color:$.t6,borderTop:idx>0?`1px solid ${$.cb}`:"none",marginTop:idx>0?6:0,...M}}>Round {r.round}</div>}
-<div style={{display:"grid",gridTemplateColumns:"28px 50px minmax(100px,1fr) 38px 32px 36px 36px",alignItems:"center",gap:4,padding:"5px 6px",borderRadius:5,fontSize:12,
+<div style={{display:"grid",gridTemplateColumns:"28px 50px minmax(80px,1fr) 38px 32px 32px 24px 32px 24px",alignItems:"center",gap:4,padding:"5px 6px",borderRadius:5,fontSize:12,
 background:r.isMyPick?"rgba(230,57,70,0.12)":r.pick%2===0?$.row:"transparent",borderLeft:r.isMyPick?"2px solid #e63946":"2px solid transparent"}}>
 <span style={{...M,fontSize:11,fontWeight:700,color:r.isMyPick?"#e63946":$.t4}}>#{r.pick}</span>
 <span style={{fontSize:11,color:$.t5}}>{r.abbrev}{r.fromAbbrev&&<span style={{fontSize:8,color:$.t3}}> via {r.fromAbbrev}</span>}</span>
@@ -923,7 +955,9 @@ background:r.isMyPick?"rgba(230,57,70,0.12)":r.pick%2===0?$.row:"transparent",bo
 <span style={{textAlign:"center"}}>{r.fillsNeed?<span style={{...M,fontSize:8,padding:"1px 4px",borderRadius:3,background:"rgba(46,204,113,0.15)",color:"#2ecc71",border:"1px solid rgba(46,204,113,0.3)"}}>NEED</span>:null}</span>
 <span style={{...M,fontSize:10,fontWeight:700,color:PC[r.player.pos]}}>{r.player.pos}</span>
 <span style={{...M,fontSize:11,fontWeight:700,color:$.t0,textAlign:"center"}}>{r.player.ovr}</span>
+<span style={{...M,fontSize:9,fontWeight:700,color:r.player.ovrDiff>0?"#2ecc71":r.player.ovrDiff<0?"#e74c3c":$.t3,textAlign:"center"}}>{r.player.ovrDiff>0?"+"+r.player.ovrDiff:r.player.ovrDiff<0?""+r.player.ovrDiff:""}</span>
 <span style={{...M,fontSize:11,color:r.player.potGap>=15?"#2ecc71":r.player.potGap>=8?"#f1c40f":$.t4,textAlign:"center"}}>{r.player.pot}</span>
+<span style={{...M,fontSize:9,fontWeight:700,color:r.player.potDiff>0?"#2ecc71":r.player.potDiff<0?"#e74c3c":$.t3,textAlign:"center"}}>{r.player.potDiff>0?"+"+r.player.potDiff:r.player.potDiff<0?""+r.player.potDiff:""}</span>
 </div></React.Fragment>)}
 </div>}
 </div>
@@ -944,9 +978,9 @@ return <div key={pos} style={{display:"flex",alignItems:"center",gap:4}}><span s
 <div style={{display:"grid",gridTemplateColumns:GR[mode],gap:4,padding:"0 7px",marginBottom:3}}>
 <SH label="Name" sk="name"/><SH label="Pos" sk="pos" align="center"/><SH label="Age" sk="age" align="center"/>
 {mode==="draft"?<SH label="Rank" sk="draftRank" align="center"/>:<SH label="Ph." sk="age" align="center"/>}
-<SH label="OVR" sk="ovr" align="center"/><SH label="Pot" sk="pot" align="center"/>
+<SH label="OVR" sk="ovr" align="center"/>{mode==="draft"&&<SH label="+/-" sk="ovrDiff" align="center"/>}<SH label="Pot" sk="pot" align="center"/>{mode==="draft"&&<SH label="+/-" sk="potDiff" align="center"/>}
 {mode==="roster"&&<SH label="Salary" sk="salary" align="right"/>}{mode==="roster"&&<SH label="Yrs" sk="yrsLeft" align="center"/>}
-{mode==="fa"&&<SH label="Salary" sk="salary" align="right"/>}{mode==="draft"&&<SH label="Gap" sk="potGap" align="center"/>}</div>
+{mode==="fa"&&<SH label="Salary" sk="salary" align="right"/>}</div>
 {disp.slice(0,80).map((p,i)=><PR key={p.pid} p={p} i={i} mode={mode} isNeed={tab==="draft"&&nPS.has(p.pos)}/>)}
 {disp.length>80&&<div style={{padding:6,textAlign:"center",fontSize:11,color:$.t3}}>+ {disp.length-80} more (use filters)</div>}
 {disp.length===0&&<div style={{padding:16,textAlign:"center",color:$.t4,fontSize:12}}>No players found</div>}
@@ -962,7 +996,7 @@ const ppRaw=myP.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);
 const sc=(TPW[pos]||[1]).length;
 const starterPids=new Set(ppRaw.slice(0,sc).map(p=>p.pid));
 const ps=posSort[pos]||{key:"ovr",dir:"desc"};
-const pp=[...ppRaw].sort((a,b)=>{const k=ps.key,d=ps.dir;if(k==="name")return d==="asc"?a.name.localeCompare(b.name):b.name.localeCompare(a.name);const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
+const pp=[...ppRaw].sort((a,b)=>{const k=ps.key,d=ps.dir;if(k==="name"){const la=(a.name||"").split(" ").slice(-1)[0];const lb=(b.name||"").split(" ").slice(-1)[0];return d==="asc"?la.localeCompare(lb):lb.localeCompare(la);}const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
 const g=pGr[pos];const gradeColor=g?.c||"#888";
 const need=PSC[pos]-ppRaw.length;const diff=g?.diff||0;
 const PSH=({label,sk,align})=>{const a=ps.key===sk;return <span onClick={()=>setPosSort(s=>({...s,[pos]:{key:sk,dir:s[pos]?.key===sk&&s[pos]?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:11,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(ps.dir==="asc"?" ↑":" ↓"):""}</span>;};
@@ -1011,6 +1045,7 @@ background:isS?`${PC[pos]}08`:i%2===0?$.row:"transparent",borderLeft:isS?`3px so
 <span style={{...H,fontSize:15,color:$.t2,width:18}}>#{i+1}</span><span style={{...M,fontWeight:700,color:PC[n.pos],width:26}}>{n.pos}</span><span style={{...H,fontSize:20,color:n.c}}>{n.g}</span>
 <span style={{fontSize:12,color:$.t4,flex:1}}>{PL[n.pos]} · ø{n.avgOvr} <span style={{color:n.diff>=0?"#2ecc71":"#e74c3c"}}>({n.diff>=0?"+":""}{n.diff})</span>{n.shortage>0&&<span style={{color:"#e74c3c"}}> · -{n.shortage}</span>}</span>
 <span style={{...M,fontSize:9,color:$.t2}}>need:{n.score.toFixed(0)}</span></div>)}</div>
+
 </>}
 
 {tab==="moves"&&<>
@@ -1180,7 +1215,8 @@ return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,
 const posOrder=[...nR].sort((a,b)=>b.tw-a.tw).map(n=>n.pos);
 return posOrder.filter(pos=>byPos[pos]&&byPos[pos].length>0).map(pos=>{
 const group=byPos[pos];const ps=mSort["vor_"+pos]||{key:"rank",dir:"asc"};
-const sorted=[...group].sort((a,b)=>{const k=ps.key,d=ps.dir;if(k==="name"||k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
+const sorted=[...group].sort((a,b)=>{const k=ps.key,d=ps.dir;if(k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));
+if(k==="name"){const la=(a.name||"").split(" ").slice(-1)[0];const lb=(b.name||"").split(" ").slice(-1)[0];return d==="asc"?la.localeCompare(lb):lb.localeCompare(la);}const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
 const g=pGr[pos];const gradeColor=g?.c||"#888";
 const VH=({label,sk,align})=>{const sec="vor_"+pos;const s=mSort[sec]||{key:"rank",dir:"asc"};const a=s.key===sk;return <span onClick={()=>setMSort(ms=>({...ms,[sec]:{key:sk,dir:ms[sec]?.key===sk&&ms[sec]?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:10,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
 return <div key={pos} style={{marginBottom:10}}>
@@ -1205,9 +1241,10 @@ return <div key={pos} style={{marginBottom:10}}>
 </div>}
 </>}
 
-{tab==="trades"&&<>
+{tab==="trades"&&<div style={{maxWidth:960,margin:"0 auto"}}>
 {(()=>{
-const sortP=(arr,side)=>{const s=tSort[side];return[...arr].sort((a,b)=>{const k=s.key,d=s.dir;if(k==="name"||k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});};
+const sortP=(arr,side)=>{const s=tSort[side];return[...arr].sort((a,b)=>{const k=s.key,d=s.dir;if(k==="pos")return d==="asc"?String(a[k]||"").localeCompare(String(b[k]||"")):String(b[k]||"").localeCompare(String(a[k]||""));
+if(k==="name"){const la=(a.name||"").split(" ").slice(-1)[0];const lb=(b.name||"").split(" ").slice(-1)[0];return d==="asc"?la.localeCompare(lb):lb.localeCompare(la);}const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});};
 const TH=({side,label,sk,align})=>{const s=tSort[side];const a=s.key===sk;return <span onClick={()=>setTSort(t=>({...t,[side]:{key:sk,dir:t[side].key===sk&&t[side].dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:10,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
 
 const calcSalaryAfter=(tid,pidsOut,pidsIn)=>{const base=data.players.filter(p=>p.tid===tid).reduce((s,p)=>s+p.salary,0);
@@ -1223,12 +1260,12 @@ return <>
 
 {tradeMode==="checker"&&<>
 <div style={cs}>
-<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:4}}>🔄 Trade Checker<Tip text="Simulates the game's trade AI. Uses the exact ValueChangeCalculator formula. R=Rebuilding, C=Contending."/></div>
+<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:4}}>🔄 Trade Checker<Tip text="Simulates the game's trade AI using the full ValueChangeCalculator formula (fudgeFactor, EXPONENT, injury discount, pick regression). Enforces salary cap. R=Rebuilding, C=Contending."/></div>
 <p style={{fontSize:10,color:$.t4,margin:"0 0 4px"}}>Select a team, add players/picks, check if the AI accepts.</p>
 {(!data.draftPicks||data.draftPicks.length===0)&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,fontSize:11,color:"#e74c3c",marginBottom:8}}>⚠ No draft picks found in your export! Make sure to check <strong>Draft Picks</strong> when exporting, or use the Quick Export bookmarklet.</div>}
 {data.draftPicks&&data.draftPicks.length>0&&<div style={{fontSize:9,color:$.t4,marginBottom:8}}>{data.draftPicks.length} draft picks loaded</div>}
 <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:12}}>
-{data.teams.filter(t=>t.tid!==myTid&&t.tid>=0).map(t=><button key={t.tid} onClick={()=>{setTradeTid(t.tid);setTradeMyPids([]);setTradeTheirPids([]);setTradeMyDpids([]);setTradeTheirDpids([]);}} style={{padding:"4px 8px",fontSize:10,border:`1px solid ${tradeTid===t.tid?"#e63946":$.cb}`,borderRadius:5,cursor:"pointer",background:tradeTid===t.tid?"rgba(230,57,70,0.15)":$.btn,color:tradeTid===t.tid?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
+{data.teams.filter(t=>t.tid!==myTid&&t.tid>=0).sort((a,b)=>a.abbrev.localeCompare(b.abbrev)).map(t=><button key={t.tid} onClick={()=>{setTradeTid(t.tid);setTradeMyPids([]);setTradeTheirPids([]);setTradeMyDpids([]);setTradeTheirDpids([]);}} style={{padding:"4px 8px",fontSize:10,border:`1px solid ${tradeTid===t.tid?"#e63946":$.cb}`,borderRadius:5,cursor:"pointer",background:tradeTid===t.tid?"rgba(230,57,70,0.15)":$.btn,color:tradeTid===t.tid?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>
 {t.abbrev}<span style={{fontSize:7,color:t.strategy==="rebuilding"?"#3498db":"#e67e22",marginLeft:2}}>{t.strategy==="rebuilding"?"R":"C"}</span>
 </button>)}
 </div>
@@ -1240,14 +1277,14 @@ const myDPs=(data.draftPicks||[]).filter(d=>d.tid===myTid).sort((a,b)=>a.season-
 const theirDPs=(data.draftPicks||[]).filter(d=>d.tid===tradeTid).sort((a,b)=>a.season-b.season||a.round-b.round);
 const togglePid=(pid,list,setter)=>setter(l=>l.includes(pid)?l.filter(x=>x!==pid):[...l,pid]);
 const toggleDpid=(dpid,list,setter)=>setter(l=>l.includes(dpid)?l.filter(x=>x!==dpid):[...l,dpid]);
-const grid="20px minmax(45px,1fr) 26px 28px 26px 28px 22px 40px 32px";
+const grid="20px minmax(80px,1fr) 26px 28px 26px 28px 22px 40px 32px";
 return <>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
 <div style={cs}>
 <div style={{fontSize:13,fontWeight:700,color:$.t8,marginBottom:2}}>{data.teams.find(t=>t.tid===myTid)?.name}</div>
 {tEng&&tEng.capAmt>0&&<div style={{fontSize:9,color:tradeEval&&tradeEval.myCapAfter>tEng.capAmt?"#e74c3c":"#3498db",marginBottom:4,...M}}>Cap: {fS(data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0))} / {fS(tEng.capAmt)}{tradeEval?` → ${fS(tradeEval.myCapAfter)}`+((tradeEval.myCapAfter>tEng.capAmt)?" ⚠ OVER CAP":""):""}</div>}
 <div style={{display:"grid",gridTemplateColumns:grid,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
-<span></span><TH side="my" label="Name" sk="name"/><TH side="my" label="Pos" sk="pos" align="center"/><TH side="my" label="OVR" sk="ovr" align="center"/><TH side="my" label="Pot" sk="pot" align="center"/><TH side="my" label="→3y" sk="ovr3" align="center"/><TH side="my" label="Age" sk="age" align="center"/><TH side="my" label="Salary" sk="salary" align="right"/><TH side="my" label="Val" sk="tradeVal" align="right"/></div>
+<span></span><TH side="my" label="Name" sk="name"/><TH side="my" label="Pos" sk="pos" align="center"/><TH side="my" label="OVR" sk="ovr" align="center"/><TH side="my" label="Pot" sk="pot" align="center"/><TH side="my" label="→3y" sk="ovr3" align="center"/><TH side="my" label="Age" sk="age" align="center"/><TH side="my" label="Salary" sk="salary" align="right"/><span className="tip" style={{position:"relative",cursor:"help"}}><TH side="my" label="Val" sk="tradeVal" align="right"/><span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:200,top:"calc(100% + 6px)",right:0,left:"auto",transform:"none"}}>Z-Score value. In the trade formula, values over 1.0 are cubed (EXPONENT=3): Val 2.0 becomes 8.0, Val 3.0 becomes 27.0. This is why stars are exponentially harder to trade for.</span></span></div>
 <div style={{maxHeight:280,overflowY:"auto"}}>
 {sortP(myP.map(p=>({...p,tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"my").map(p=><div key={p.pid} onClick={()=>togglePid(p.pid,tradeMyPids,setTradeMyPids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:tradeMyPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",border:tradeMyPids.includes(p.pid)?"1px solid rgba(230,57,70,0.3)":"1px solid transparent"}}>
@@ -1338,7 +1375,7 @@ const grid2="20px minmax(50px,1fr) 26px 28px 26px 28px 22px 40px 24px 30px";
 return <>
 <div style={cs}>
 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-<div style={{fontSize:15,fontWeight:700,color:$.t8}}>🔍 Shop Player / Pick<Tip text="Select one or more players and/or picks to shop as a package. Finds offers from all 31 teams."/></div>
+<div style={{fontSize:15,fontWeight:700,color:$.t8}}>🔍 Shop Player / Pick<Tip text="Select one or more players and/or picks to shop as a package. Finds 1-for-1 up to 3-for-1 offers from all 31 teams. Cap! = trade exceeds your salary cap."/></div>
 {isActive&&<button onClick={()=>{setShopPids([]);setShopDpids([]);}} style={{...M,fontSize:9,padding:"3px 8px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:4,color:"#e74c3c",cursor:"pointer"}}>Clear ({shopPids.length+shopDpids.length})</button>}
 </div>
 {(!data.draftPicks||data.draftPicks.length===0)&&<div style={{padding:"8px 12px",background:"rgba(231,76,60,0.1)",border:"1px solid rgba(231,76,60,0.3)",borderRadius:6,fontSize:11,color:"#e74c3c",marginBottom:8}}>⚠ No draft picks in export. Re-export with <strong>Draft Picks</strong> checked, or use the Quick Export bookmarklet.</div>}
@@ -1388,7 +1425,14 @@ Offers for {[...shopPids.map(pid=>{const p=data.players.find(x=>x.pid===pid);ret
 <div style={{display:"grid",gridTemplateColumns:"36px minmax(45px,1fr) 26px 26px 26px 26px 22px 38px 24px 30px 36px 30px",gap:3,padding:"0 4px",marginBottom:4,fontSize:9,color:$.t4}}>
 <OfH label="Team" sk="team" align="center"/><span style={{fontSize:9,color:$.t4}}>Return</span><OfH label="Pos" sk="returnPos" align="center"/><OfH label="OVR" sk="returnOvr" align="center"/><OfH label="Pot" sk="returnPot" align="center"/><OfH label="→3y" sk="return3y" align="center"/><OfH label="Age" sk="returnAge" align="center"/><OfH label="Sal" sk="returnSal" align="right"/><OfH label="Yrs" sk="returnYrs" align="center"/><OfH label="Val" sk="returnVal" align="center"/><OfH label="Deal" sk="dvMe" align="center"/><OfH label="dv" sk="dvThem" align="center"/></div>
 {sortedOffers.map((o,i)=>{const team=o.team;
-return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent",padding:"2px 0"}}>
+const myTotalSal=data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0);
+const theirTotalSal=data.players.filter(p=>p.tid===team.tid).reduce((s,p)=>s+p.salary,0);
+const shopSalOut=shopPids.reduce((s,pid)=>{const p=data.players.find(x=>x.pid===pid);return s+(p?p.salary:0);},0);
+const offerSalIn=o.players.reduce((s,p)=>s+p.salary,0);
+const myCapAfter=myTotalSal-shopSalOut+offerSalIn;
+const theirCapAfter=theirTotalSal-offerSalIn+shopSalOut;
+const capOver=tEng&&tEng.capAmt>0&&(myCapAfter>tEng.capAmt||theirCapAfter>tEng.capAmt);
+return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent",padding:"2px 0",opacity:capOver?0.6:1}}>
 {o.players.map((p,pi)=>{const pp3=p3(p.pid);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"36px minmax(45px,1fr) 26px 26px 26px 26px 22px 38px 24px 30px 36px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
 <span style={{...M,fontWeight:700,fontSize:10,color:$.t,textAlign:"center"}}>{pi===0?team.abbrev:""}</span>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
@@ -1400,7 +1444,7 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>}
-{pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:o.dvMe>0?"#2ecc71":"#f1c40f",background:o.dvMe>0?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{o.dvMe>0?"Good":"Fair"}</span>}
+{pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:capOver?"#e74c3c":o.dvMe>0?"#2ecc71":"#f1c40f",background:capOver?"rgba(231,76,60,0.12)":o.dvMe>0?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{capOver?"Cap!":o.dvMe>0?"Good":"Fair"}</span>}
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{o.dvThem.toFixed(1)}</span>}
 {pi>0&&<span/>}{pi>0&&<span/>}{pi>0&&<span/>}
 </div>;})}
@@ -1421,7 +1465,7 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 </>}
 
 </>;})()}
-</>}
+</div>}
 
 {tab==="compare"&&<>
 <div style={{display:"flex",gap:6,marginBottom:12}}>
@@ -1641,7 +1685,7 @@ return <div style={{display:"flex",flexDirection:"column",gap:4}}>
 <SH label="+3y" sk="ovr3" align="center"/>
 <SH label="Δ3y" sk="chg3" align="center"/>
 </div>
-{dFilt([...agingData.players]).sort((a,b)=>{const k=sort.key,d=sort.dir;if(k==="name")return d==="asc"?a.name.localeCompare(b.name):b.name.localeCompare(a.name);if(k==="pos")return d==="asc"?a.pos.localeCompare(b.pos):b.pos.localeCompare(a.pos);const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;}).map((p,i)=>
+{dFilt([...agingData.players]).sort((a,b)=>{const k=sort.key,d=sort.dir;if(k==="name"){const la=(a.name||"").split(" ").slice(-1)[0];const lb=(b.name||"").split(" ").slice(-1)[0];return d==="asc"?la.localeCompare(lb):lb.localeCompare(la);}if(k==="pos")return d==="asc"?a.pos.localeCompare(b.pos):b.pos.localeCompare(a.pos);const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;}).map((p,i)=>
 <div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(100px,1fr) 32px 28px 38px 36px 38px 38px 38px 44px",alignItems:"center",gap:4,padding:"5px 4px",borderRadius:5,fontSize:12,background:p.chg3<=-5?$.gbad:p.chg3>=5?$.ggood:i%2===0?$.row:"transparent"}}>
 <span onClick={()=>setSelP(p)} style={{fontWeight:600,color:$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}</span>
 <span style={{...M,fontWeight:700,color:PC[p.pos],fontSize:10,textAlign:"center"}}>{p.pos}</span>
