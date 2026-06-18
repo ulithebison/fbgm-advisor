@@ -310,8 +310,8 @@ const pD=js=>{const raw=JSON.parse(js);let pl,tm,se;const gA=(g,k)=>{if(!g)retur
 if(Array.isArray(raw)){pl=raw;tm=[];se=new Date().getFullYear();}else if(raw.players){pl=raw.players;tm=raw.teams||[];se=gA(raw.gameAttributes,"season")||raw.startingSeason||new Date().getFullYear();}else throw new Error("Unknown format");
 pl=pl.filter(p=>p.tid===undefined||p.tid>=-2);
 const pr=pl.map(p=>{const r=p.ratings&&p.ratings.length>0?p.ratings[p.ratings.length-1]:null;if(!r)return null;const rt={};RK.forEach(k=>rt[k]=r[k]||0);rt.pos=r.pos||p.pos||"QB";const age=p.born?se-p.born.year:25;const ct=p.contract||{};const sal=ct.amount||0;const exp=ct.exp||0;const yl=exp?exp-se:0;
-const pos=r.pos||p.pos||"QB";const fz=r.fuzz||0;const ovr=bd(Math.round((r.ovr||0)+fz),0,100);const pot=bd(Math.round((r.pot||ovr)+fz),0,100);const trueOvr=bd(Math.round(r.ovr||0),0,100);const truePot=bd(Math.round(r.pot||r.ovr||0),0,100);
-return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,trueOvr,truePot,potGap:pot-ovr,ovrDiff:(trueOvr||0)-(ovr||0),potDiff:(truePot||0)-(pot||0),phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,value:p.value||p.valueFuzz||0,valueFuzz:p.valueFuzz||p.value||0,injury:p.injury||{type:"Healthy",gamesRemaining:0},rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
+const pos=r.pos||p.pos||"QB";const fz=r.fuzz||0;const ovr=bd(Math.round(r.ovr||0),0,100);const pot=bd(Math.round(r.pot||r.ovr||0),0,100);const trueOvr=ovr;const truePot=pot;const fuzzedOvr=bd(Math.round((r.ovr||0)+fz),0,100);const fuzzedPot=bd(Math.round((r.pot||r.ovr||0)+fz),0,100);
+return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,trueOvr,truePot,potGap:pot-ovr,ovrDiff:(trueOvr||0)-(fuzzedOvr||0),potDiff:(truePot||0)-(fuzzedPot||0),phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,value:p.value||p.valueFuzz||0,valueFuzz:p.valueFuzz||p.value||0,injury:p.injury||{type:"Healthy",gamesRemaining:0},rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
 let tl=tm.map(t=>{const s=t.seasons&&t.seasons.length>0?t.seasons[t.seasons.length-1]:null;return{tid:t.tid,name:`${t.region||""} ${t.name||""}`.trim(),abbrev:t.abbrev||`T${t.tid}`,won:s?s.won:0,lost:s?s.lost:0,strategy:t.strategy||"contending",seasons:t.seasons||[]};});
 if(!tl.length){const ts=[...new Set(pr.filter(p=>p.tid>=0).map(p=>p.tid))].sort((a,b)=>a-b);tl=ts.map(t=>({tid:t,name:`Team ${t}`,abbrev:`T${t}`,won:0,lost:0,strategy:"contending",seasons:[]}));}
 const difficulty=gA(raw.gameAttributes,"difficulty")??0;const phase=gA(raw.gameAttributes,"phase")??-1;const numGames=gA(raw.gameAttributes,"numGames")||17;const numDraftRounds=gA(raw.gameAttributes,"numDraftRounds")||7;
@@ -474,6 +474,18 @@ for(let i=0;i<Math.min(teamP.length,5);i++){for(let j=i+1;j<Math.min(teamP.lengt
 for(const tp of teamP.slice(0,4)){for(let i=0;i<Math.min(teamPicks.length,3);i++){for(let j=i+1;j<Math.min(teamPicks.length,3);j++){for(let k=j+1;k<Math.min(teamPicks.length,3);k++)tryOffer([tp],[teamPicks[i],teamPicks[j],teamPicks[k]]);}}}
 // 4 picks
 for(let i=0;i<Math.min(teamPicks.length,3);i++){for(let j=i+1;j<Math.min(teamPicks.length,3);j++){for(let k=j+1;k<Math.min(teamPicks.length,3);k++){for(let l=k+1;l<Math.min(teamPicks.length,3);l++)tryOffer([],[teamPicks[i],teamPicks[j],teamPicks[k],teamPicks[l]]);}}}
+// 5 players
+for(let i=0;i<Math.min(teamP.length,4);i++){for(let j=i+1;j<Math.min(teamP.length,4);j++){for(let k=j+1;k<Math.min(teamP.length,4);k++){for(let l=k+1;l<Math.min(teamP.length,4);l++){for(let m=l+1;m<Math.min(teamP.length,4);m++)tryOffer([teamP[i],teamP[j],teamP[k],teamP[l],teamP[m]],[]);}}}}
+// 4 players + 1 pick
+for(let i=0;i<Math.min(teamP.length,4);i++){for(let j=i+1;j<Math.min(teamP.length,4);j++){for(let k=j+1;k<Math.min(teamP.length,4);k++){for(let l=k+1;l<Math.min(teamP.length,4);l++){for(const dp of teamPicks.slice(0,3))tryOffer([teamP[i],teamP[j],teamP[k],teamP[l]],[dp]);}}}}
+// 3 players + 2 picks
+for(let i=0;i<Math.min(teamP.length,4);i++){for(let j=i+1;j<Math.min(teamP.length,4);j++){for(let k=j+1;k<Math.min(teamP.length,4);k++){for(let pi=0;pi<Math.min(teamPicks.length,3);pi++){for(let pj=pi+1;pj<Math.min(teamPicks.length,3);pj++)tryOffer([teamP[i],teamP[j],teamP[k]],[teamPicks[pi],teamPicks[pj]]);}}}}
+// 2 players + 3 picks
+for(let i=0;i<Math.min(teamP.length,4);i++){for(let j=i+1;j<Math.min(teamP.length,4);j++){for(let pi=0;pi<Math.min(teamPicks.length,3);pi++){for(let pj=pi+1;pj<Math.min(teamPicks.length,3);pj++){for(let pk=pj+1;pk<Math.min(teamPicks.length,3);pk++)tryOffer([teamP[i],teamP[j]],[teamPicks[pi],teamPicks[pj],teamPicks[pk]]);}}}}
+// 1 player + 4 picks
+for(const tp of teamP.slice(0,4)){for(let i=0;i<Math.min(teamPicks.length,3);i++){for(let j=i+1;j<Math.min(teamPicks.length,3);j++){for(let k=j+1;k<Math.min(teamPicks.length,3);k++){for(let l=k+1;l<Math.min(teamPicks.length,3);l++)tryOffer([tp],[teamPicks[i],teamPicks[j],teamPicks[k],teamPicks[l]]);}}}}
+// 5 picks
+for(let i=0;i<Math.min(teamPicks.length,3);i++){for(let j=i+1;j<Math.min(teamPicks.length,3);j++){for(let k=j+1;k<Math.min(teamPicks.length,3);k++){for(let l=k+1;l<Math.min(teamPicks.length,3);l++){for(let m=l+1;m<Math.min(teamPicks.length,3);m++)tryOffer([],[teamPicks[i],teamPicks[j],teamPicks[k],teamPicks[l],teamPicks[m]]);}}}}
 });
 let filtered=offers;
 if(shopFilter==="PICKS")filtered=offers.filter(o=>o.players.length===0&&o.picks.length>0);
