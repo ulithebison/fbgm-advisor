@@ -414,7 +414,7 @@ const theirSalIn=tradeMyPids.reduce((s,pid)=>{const p=tEng.playerMap.get(pid);re
 const myTotalSal=data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0);
 const theirTotalSal=data.players.filter(p=>p.tid===tradeTid).reduce((s,p)=>s+p.salary,0);
 const myCapAfter=myTotalSal-mySalOut+mySalIn;const theirCapAfter=theirTotalSal-theirSalOut+theirSalIn;
-const capBlocked=tEng.capAmt>0&&(myCapAfter>tEng.capAmt||theirCapAfter>tEng.capAmt);
+const myCapBefore=myPlayers.reduce((s,p)=>s+p.salary,0);const theirCapBefore=data.players.filter(p=>p.tid===t.tid).reduce((s,p)=>s+p.salary,0);const capBlocked=tEng.capAmt>0&&((myCapAfter>tEng.capAmt&&myCapAfter>myCapBefore)||(theirCapAfter>tEng.capAmt&&theirCapAfter>theirCapBefore));
 const accepted=dv>0&&!capBlocked;
 const msg=capBlocked?"Salary cap exceeded!":dv>0?"Accepted!":dv>-2?"Close, but not quite enough.":dv>-5?"Not a good deal for them.":"What, are you crazy?!";
 const color=accepted?"#2ecc71":capBlocked?"#e74c3c":dv>-2?"#f1c40f":dv>-5?"#e67e22":"#e74c3c";
@@ -1539,7 +1539,7 @@ return <>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:12}}>
 <div style={cs}>
 <div style={{fontSize:13,fontWeight:700,color:$.t8,marginBottom:2}}>{teamMap.get(myTid)?.name}</div>
-{tEng&&tEng.capAmt>0&&<div style={{fontSize:9,color:tradeEval&&tradeEval.myCapAfter>tEng.capAmt?"#e74c3c":"#3498db",marginBottom:4,...M}}>Cap: {fS(data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0))} / {fS(tEng.capAmt)}{tradeEval?` → ${fS(tradeEval.myCapAfter)}`+((tradeEval.myCapAfter>tEng.capAmt)?" ⚠ OVER CAP":""):""}</div>}
+{tEng&&tEng.capAmt>0&&<div style={{fontSize:9,color:tradeEval&&tradeEval.myCapAfter>tEng.capAmt&&tradeEval.myCapAfter>tradeEval.myCapBefore?"#e74c3c":"#3498db",marginBottom:4,...M}}>Cap: {fS(data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0))} / {fS(tEng.capAmt)}{tradeEval?` → ${fS(tradeEval.myCapAfter)}`+((tradeEval.myCapAfter>tEng.capAmt&&tradeEval.myCapAfter>tradeEval.myCapBefore)?" ⚠ OVER CAP":""):""}</div>}
 <div style={{display:"grid",gridTemplateColumns:grid,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
 <span></span><TH side="my" label="Name" sk="name"/><TH side="my" label="Pos" sk="pos" align="center"/><TH side="my" label="OVR" sk="ovr" align="center"/><TH side="my" label="Pot" sk="pot" align="center"/><TH side="my" label="→3y" sk="ovr3" align="center"/><TH side="my" label="Age" sk="age" align="center"/><TH side="my" label="Salary" sk="salary" align="right"/><span className="tip" style={{position:"relative",cursor:"help"}}><TH side="my" label="Val" sk="tradeVal" align="right"/><span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:200,top:"calc(100% + 6px)",right:0,left:"auto",transform:"none"}}>Z-Score value. In the trade formula, values over 1.0 are cubed (EXPONENT=3): Val 2.0 becomes 8.0, Val 3.0 becomes 27.0. This is why stars are exponentially harder to trade for.</span></span></div>
 <div style={{maxHeight:280,overflowY:"auto"}}>
@@ -1567,7 +1567,7 @@ background:tradeMyDpids.includes(dp.dpid)?"rgba(230,57,70,0.12)":"rgba(241,196,1
 </div>
 <div style={cs}>
 <div style={{fontSize:13,fontWeight:700,color:$.t8,marginBottom:2}}>{otherTeam?.name} <span style={{fontSize:10,fontWeight:400,color:otherTeam?.strategy==="rebuilding"?"#3498db":"#e67e22"}}>{otherTeam?.strategy}</span></div>
-{tEng&&tEng.capAmt>0&&<div style={{fontSize:9,color:tradeEval&&tradeEval.theirCapAfter>tEng.capAmt?"#e74c3c":"#3498db",marginBottom:4,...M}}>Cap: {fS(data.players.filter(p=>p.tid===tradeTid).reduce((s,p)=>s+p.salary,0))} / {fS(tEng.capAmt)}{tradeEval?` → ${fS(tradeEval.theirCapAfter)}`+((tradeEval.theirCapAfter>tEng.capAmt)?" ⚠ OVER CAP":""):""}</div>}
+{tEng&&tEng.capAmt>0&&<div style={{fontSize:9,color:tradeEval&&tradeEval.theirCapAfter>tEng.capAmt&&tradeEval.theirCapAfter>tradeEval.theirCapBefore?"#e74c3c":"#3498db",marginBottom:4,...M}}>Cap: {fS(data.players.filter(p=>p.tid===tradeTid).reduce((s,p)=>s+p.salary,0))} / {fS(tEng.capAmt)}{tradeEval?` → ${fS(tradeEval.theirCapAfter)}`+((tradeEval.theirCapAfter>tEng.capAmt&&tradeEval.theirCapAfter>tradeEval.theirCapBefore)?" ⚠ OVER CAP":""):""}</div>}
 <div style={{display:"grid",gridTemplateColumns:grid,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
 <span></span><TH side="their" label="Name" sk="name"/><TH side="their" label="Pos" sk="pos" align="center"/><TH side="their" label="OVR" sk="ovr" align="center"/><TH side="their" label="Pot" sk="pot" align="center"/><TH side="their" label="→3y" sk="ovr3" align="center"/><TH side="their" label="Age" sk="age" align="center"/><TH side="their" label="Salary" sk="salary" align="right"/><TH side="their" label="Val" sk="tradeVal" align="right"/></div>
 <div style={{maxHeight:280,overflowY:"auto"}}>
@@ -1704,7 +1704,7 @@ const shopSalOut=shopPids.reduce((s,pid)=>{const p=tEng?.playerMap.get(pid);retu
 const offerSalIn=o.players.reduce((s,p)=>s+p.salary,0);
 const myCapAfter=myTotalSal-shopSalOut+offerSalIn;
 const theirCapAfter=theirTotalSal-offerSalIn+shopSalOut;
-const capOver=tEng&&tEng.capAmt>0&&(myCapAfter>tEng.capAmt||theirCapAfter>tEng.capAmt);
+const myCapBefore=data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0);const theirCapBefore=data.players.filter(p=>p.tid===o.team.tid).reduce((s,p)=>s+p.salary,0);const capOver=tEng&&tEng.capAmt>0&&((myCapAfter>tEng.capAmt&&myCapAfter>myCapBefore)||(theirCapAfter>tEng.capAmt&&theirCapAfter>theirCapBefore));
 return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent",padding:"2px 0",opacity:capOver?0.6:1}}>
 {o.players.map((p,pi)=>{const pp3=p3(p.pid);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
 <span style={{...M,fontWeight:700,fontSize:10,color:$.t,textAlign:"center"}}>{pi===0?team.abbrev:""}</span>
