@@ -337,7 +337,7 @@ const[compP1,setCompP1]=useState(null);const[compP2,setCompP2]=useState(null);
 const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
 const[tradeTid,setTradeTid]=useState(null);const[tradeMyPids,setTradeMyPids]=useState([]);const[tradeTheirPids,setTradeTheirPids]=useState([]);
 const[tradeMyDpids,setTradeMyDpids]=useState([]);const[tradeTheirDpids,setTradeTheirDpids]=useState([]);
-const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopFilter,setShopFilter]=useState("ALL");const[shopTeamFilter,setShopTeamFilter]=useState("ALL");const[huntPid,setHuntPid]=useState(null);const[huntSearch,setHuntSearch]=useState("");const[healthExpand,setHealthExpand]=useState(null);
+const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopFilter,setShopFilter]=useState("ALL");const[shopTeamFilter,setShopTeamFilter]=useState("ALL");const[huntPid,setHuntPid]=useState(null);const[huntDpid,setHuntDpid]=useState(null);const[huntSearch,setHuntSearch]=useState("");const[healthExpand,setHealthExpand]=useState(null);
 const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);setShopTeamFilter("ALL");setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));};
 const[tSort,setTSort]=useState({my:{key:"ovr",dir:"desc"},their:{key:"ovr",dir:"desc"}});
 const fileRef=useRef(null);
@@ -493,21 +493,25 @@ else if(shopFilter!=="ALL")filtered=offers.filter(o=>o.players.some(p=>p.pos===s
 return filtered.sort((a,b)=>b.dvMe-a.dvMe).slice(0,100);
 },[shopPids,shopDpids,shopFilter,data,tEng,myTid]);
 const huntOffers=useMemo(()=>{
-if(!tEng||!data||!huntPid)return[];
-const target=data.players.find(p=>p.pid===huntPid);if(!target||target.tid<0||target.tid===myTid)return[];
-const targetTid=target.tid;
+if(!tEng||!data||(!huntPid&&!huntDpid))return[];
+// Target can be a player or a pick
+const targetPlayer=huntPid?data.players.find(p=>p.pid===huntPid):null;
+const targetPick=huntDpid?(data.draftPicks||[]).find(d=>d.dpid===huntDpid):null;
+if(!targetPlayer&&!targetPick)return[];
+const targetTid=targetPlayer?targetPlayer.tid:targetPick.tid;
+if(targetTid<0||targetTid===myTid)return[];
 const targetTeam=data.teams.find(t=>t.tid===targetTid);
 const theirStrategy=targetTeam?.strategy||"contending";
 const myStrategy=data.teams.find(t=>t.tid===myTid)?.strategy||"contending";
-const targetA=tEng.makePlayerAsset(target,true);
-const targetGet=tEng.makePlayerAsset(target,false);
+const targetA=targetPlayer?tEng.makePlayerAsset(targetPlayer,true):tEng.makePickAsset(targetPick,targetTid,myTid,[],[]);
+const targetGet=targetPlayer?tEng.makePlayerAsset(targetPlayer,false):tEng.makePickAsset(targetPick,targetTid,myTid,[],[]);
 const targetLoss=tEng.sumAssets([targetA],theirStrategy,false);
 const targetGain=tEng.sumAssets([targetGet],myStrategy,true);
 const myPlayers=data.players.filter(p=>p.tid===myTid).sort((a,b)=>(b.value||0)-(a.value||0));
 const myPicks=(data.draftPicks||[]).filter(d=>d.tid===myTid).sort((a,b)=>a.round-b.round||a.season-b.season);
 const offers=[];const MAX=6;const MAXP=8;
 const tryOffer=(players,picks)=>{
-const myAs=players.map(p=>tEng.makePlayerAsset(p,true)).concat(picks.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,players.map(p=>p.pid),[target.pid])));
+const myAs=players.map(p=>tEng.makePlayerAsset(p,true)).concat(picks.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,players.map(p=>p.pid),targetPlayer?[targetPlayer.pid]:[])));
 const dvThem=tEng.sumAssets(myAs,theirStrategy,true)-targetLoss;
 if(dvThem<=0||dvThem>=25)return;
 const myLoss=tEng.sumAssets(players.map(p=>tEng.makePlayerAsset(p,false)).concat(picks.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,[],[]))),myStrategy,false);
@@ -538,7 +542,7 @@ for(let i=0;i<Math.min(myPlayers.length,4);i++){for(let j=i+1;j<Math.min(myPlaye
 // 1 player + 3 picks
 for(const p of myPlayers.slice(0,4)){for(let i=0;i<Math.min(myPicks.length,3);i++){for(let j=i+1;j<Math.min(myPicks.length,3);j++){for(let k=j+1;k<Math.min(myPicks.length,3);k++)tryOffer([p],[myPicks[i],myPicks[j],myPicks[k]]);}}}
 return offers.sort((a,b)=>b.dvMe-a.dvMe).slice(0,100);
-},[huntPid,data,tEng,myTid]);
+},[huntPid,huntDpid,data,tEng,myTid]);
 
 const nPS=useMemo(()=>new Set(nR.filter(n=>n.g==="F"||n.g==="D"||n.g==="C"||n.g==="C+"||n.shortage>0||n.diff<-5).map(n=>n.pos)),[nR]);
 
@@ -1502,7 +1506,7 @@ const cap2=data.capSettings?.salaryCap||0;
 
 return <>
 <div style={{display:"flex",gap:6,marginBottom:12}}>
-{["checker","finder","hunter"].map(m=><button key={m} onClick={()=>{setTradeMode(m);if(m==="finder")setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));if(m==="hunter")setMSort(ms=>({...ms,hunt:{key:"dvThem",dir:"asc"}}));}} style={{flex:1,padding:"8px",border:"none",cursor:"pointer",fontSize:12,fontWeight:tradeMode===m?700:500,fontFamily:"'DM Sans',sans-serif",background:tradeMode===m?$.acc:"transparent",color:tradeMode===m?"#e63946":$.tabi,borderBottom:tradeMode===m?"2px solid #e63946":"2px solid transparent",borderRadius:"6px 6px 0 0"}}>{m==="checker"?"🔄 Trade Checker":m==="finder"?"🔍 Shop Player":"🎯 Find Player"}</button>)}
+{["checker","finder","hunter"].map(m=><button key={m} onClick={()=>{setTradeMode(m);if(m==="finder")setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));if(m==="hunter"){setMSort(ms=>({...ms,hunt:{key:"dvThem",dir:"asc"}}));setHuntPid(null);setHuntDpid(null);setHuntSearch("");}}} style={{flex:1,padding:"8px",border:"none",cursor:"pointer",fontSize:12,fontWeight:tradeMode===m?700:500,fontFamily:"'DM Sans',sans-serif",background:tradeMode===m?$.acc:"transparent",color:tradeMode===m?"#e63946":$.tabi,borderBottom:tradeMode===m?"2px solid #e63946":"2px solid transparent",borderRadius:"6px 6px 0 0"}}>{m==="checker"?"🔄 Trade Checker":m==="finder"?"🔍 Shop Player":"🎯 Find Player"}</button>)}
 </div>
 
 {tradeMode==="checker"&&<>
@@ -1727,17 +1731,19 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 const allPlayers=data.players.filter(p=>p.tid>=0&&p.tid!==myTid);
 const filtered=huntSearch.length>=2?allPlayers.filter(p=>p.name.toLowerCase().includes(huntSearch.toLowerCase())):[];
 const target=huntPid?data.players.find(p=>p.pid===huntPid):null;
-const targetTeam=target?data.teams.find(t=>t.tid===target.tid):null;
+const targetPick=huntDpid?(data.draftPicks||[]).find(d=>d.dpid===huntDpid):null;
+const targetTid2=target?target.tid:(targetPick?targetPick.tid:null);
+const targetTeam=targetTid2!==null?data.teams.find(t=>t.tid===targetTid2):null;
 const huntSort=mSort["hunt"]||{key:"dvThem",dir:"asc"};
 const sortedHunt=[...huntOffers].sort((a,b)=>{const k=huntSort.key,d=huntSort.dir;const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
 const HH=({label,sk,align})=>{const s=huntSort;const a=s.key===sk;return <span onClick={()=>setMSort(ms=>({...ms,hunt:{key:sk,dir:ms.hunt?.key===sk&&ms.hunt?.dir==="desc"?"asc":"desc"}}))} style={{cursor:"pointer",fontSize:9,color:a?$.t9:$.t4,fontWeight:a?700:400,userSelect:"none",textAlign:align||"left"}}>{label}{a?(s.dir==="asc"?" ↑":" ↓"):""}</span>;};
 return <>
 <div style={cs}>
-<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:4}}>🎯 Find Player<Tip text="Search for any player in the league and see what packages from your roster the AI would accept. Shows what you need to give up to acquire them."/></div>
-<p style={{fontSize:10,color:$.t4,margin:"0 0 8px"}}>Search for a player on another team. See what you need to give up to get them.</p>
-<input type="text" value={huntSearch} onChange={e=>{setHuntSearch(e.target.value);setHuntPid(null);}} placeholder="Search player name..." style={{width:"100%",padding:"8px 12px",fontSize:13,borderRadius:6,border:`1px solid ${$.cb}`,background:$.card,color:$.t,fontFamily:"'DM Sans',sans-serif",marginBottom:8,boxSizing:"border-box"}}/>
-{filtered.length>0&&!huntPid&&<div style={{maxHeight:200,overflowY:"auto",marginBottom:8}}>
-{filtered.slice(0,20).map(p=><div key={p.pid} onClick={()=>{setHuntPid(p.pid);setHuntSearch(p.name);}} style={{display:"grid",gridTemplateColumns:"1fr 28px 30px 28px 24px 44px 50px",alignItems:"center",gap:4,padding:"5px 8px",fontSize:11,cursor:"pointer",borderRadius:4,background:$.row,marginBottom:2}}>
+<div style={{fontSize:15,fontWeight:700,color:$.t8,marginBottom:4}}>🎯 Find Player / Pick<Tip text="Search for any player or browse draft picks from other teams. See what packages from your roster the AI would accept to acquire them."/></div>
+<p style={{fontSize:10,color:$.t4,margin:"0 0 8px"}}>Search a player or select a draft pick from another team.</p>
+<input type="text" value={huntSearch} onChange={e=>{setHuntSearch(e.target.value);setHuntPid(null);setHuntDpid(null);}} placeholder="Search player name..." style={{width:"100%",padding:"8px 12px",fontSize:13,borderRadius:6,border:`1px solid ${$.cb}`,background:$.card,color:$.t,fontFamily:"'DM Sans',sans-serif",marginBottom:8,boxSizing:"border-box"}}/>
+{filtered.length>0&&!huntPid&&!huntDpid&&<div style={{maxHeight:200,overflowY:"auto",marginBottom:8}}>
+{filtered.slice(0,20).map(p=><div key={p.pid} onClick={()=>{setHuntPid(p.pid);setHuntDpid(null);setHuntSearch(p.name);}} style={{display:"grid",gridTemplateColumns:"1fr 28px 30px 28px 24px 44px 50px",alignItems:"center",gap:4,padding:"5px 8px",fontSize:11,cursor:"pointer",borderRadius:4,background:$.row,marginBottom:2}}>
 <span style={{fontWeight:600,color:$.t}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
 <span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
@@ -1747,17 +1753,45 @@ return <>
 <span style={{...M,fontSize:9,color:$.t5,textAlign:"center"}}>{data.teams.find(t=>t.tid===p.tid)?.abbrev}</span>
 </div>)}
 </div>}
+
+{!huntPid&&!huntDpid&&<div style={{marginTop:8}}>
+<div style={{fontSize:11,fontWeight:700,color:$.t5,marginBottom:4}}>Or browse draft picks by team:</div>
+<div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:6}}>
+{data.teams.filter(t=>t.tid>=0&&t.tid!==myTid).sort((a,b)=>a.abbrev.localeCompare(b.abbrev)).map(t=>{
+const picks=(data.draftPicks||[]).filter(d=>d.tid===t.tid).sort((a,b)=>a.round-b.round||a.season-b.season);
+return picks.length>0?<span key={t.tid} style={{position:"relative"}}>
+<button onClick={()=>setHuntSearch(huntSearch===t.abbrev?"":t.abbrev)} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${huntSearch===t.abbrev?"#3498db":$.cb}`,borderRadius:4,cursor:"pointer",background:huntSearch===t.abbrev?"rgba(52,152,219,0.15)":$.btn,color:huntSearch===t.abbrev?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif"}}>{t.abbrev}</button>
+</span>:null;})}
 </div>
-{target&&<div style={cs}>
+{(()=>{const selTeam=data.teams.find(t=>t.abbrev===huntSearch&&t.tid!==myTid);
+if(!selTeam)return null;
+const teamPicks=(data.draftPicks||[]).filter(d=>d.tid===selTeam.tid).sort((a,b)=>a.season-b.season||a.round-b.round);
+if(!teamPicks.length)return null;
+return <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+{teamPicks.filter(dp=>dp.round<=4).map(dp=>{const from=dp.originalTid!==dp.tid?data.teams.find(t=>t.tid===dp.originalTid):null;
+return <div key={dp.dpid} onClick={()=>{setHuntDpid(dp.dpid);setHuntPid(null);setHuntSearch("");}} style={{padding:"4px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontWeight:600,background:"rgba(241,196,15,0.08)",border:"1px solid rgba(241,196,15,0.2)",color:"#f1c40f"}}>
+{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}
+</div>;})}
+</div>;})()}
+</div>}
+</div>
+
+{(target||targetPick)&&<div style={cs}>
 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+{target&&<>
 <div style={{fontSize:14,fontWeight:700,color:"#e63946"}}>{target.name}</div>
 <span style={{...M,fontSize:10,color:PC[target.pos]}}>{target.pos}</span>
 <span style={{...M,fontSize:12,fontWeight:700,color:$.t0}}>{target.ovr}</span>
 <span style={{...M,color:target.potGap>=10?"#2ecc71":$.t3}}>{target.pot}</span>
 <span style={{fontSize:10,color:$.t5}}>{target.age}y</span>
 <span style={{fontSize:10,color:$.t4}}>{fS(target.salary)}</span>
-<span style={{...M,fontSize:10,color:$.t5}}>{targetTeam?.abbrev} {targetTeam?.strategy==="rebuilding"?"R":"C"}</span>
 <span style={{...M,fontSize:10,color:$.t4}}>Val: {tEng?tEng.zs(target.value||0).toFixed(1):""}</span>
+</>}
+{!target&&targetPick&&<>
+<div style={{fontSize:14,fontWeight:700,color:"#f1c40f"}}>{targetPick.season} Round {targetPick.round}{targetPick.pick>0?" Pick "+targetPick.pick:""}</div>
+<span style={{...M,fontSize:10,color:"#f1c40f"}}>PICK</span>
+</>}
+<span style={{...M,fontSize:10,color:$.t5}}>{targetTeam?.abbrev} {targetTeam?.strategy==="rebuilding"?"R":"C"}</span>
 </div>
 {huntOffers.length===0&&<div style={{color:$.t4,fontSize:12,padding:8}}>No viable packages found. This player may be too valuable to trade for with your current roster.</div>}
 {huntOffers.length>0&&<>
