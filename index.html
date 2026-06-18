@@ -1692,7 +1692,7 @@ return teams.length>1&&<div style={{display:"flex",gap:3,marginBottom:8,flexWrap
 {teams.map(t=><button key={t} onClick={()=>setShopTeamFilter(t===shopTeamFilter?"ALL":t)} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopTeamFilter===t?"#3498db":$.cb}`,borderRadius:4,cursor:"pointer",background:shopTeamFilter===t?"rgba(52,152,219,0.15)":$.btn,color:shopTeamFilter===t?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopTeamFilter===t?700:400}}>{t}</button>)}
 </div>;})()}
 
-{shopOffers.length===0&&<div style={{color:$.t4,fontSize:12,padding:8}}>No viable trade offers found{shopFilter!=="ALL"?" for this filter":""}.</div>}
+{shopOffers.length===0&&<div style={{color:$.t4,fontSize:12,padding:8}}>No viable trade offers found{shopExclude.size>0?" for this filter":""}.</div>}
 
 {shopOffers.length>0&&<>
 <div style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",gap:3,padding:"0 4px",marginBottom:4,fontSize:9,color:$.t4}}>
