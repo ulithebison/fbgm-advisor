@@ -339,8 +339,8 @@ const[compP1,setCompP1]=useState(null);const[compP2,setCompP2]=useState(null);
 const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
 const[tradeTid,setTradeTid]=useState(null);const[tradeMyPids,setTradeMyPids]=useState([]);const[tradeTheirPids,setTradeTheirPids]=useState([]);
 const[tradeMyDpids,setTradeMyDpids]=useState([]);const[tradeTheirDpids,setTradeTheirDpids]=useState([]);
-const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopExclude,setShopExclude]=useState(new Set());const[shopTeamFilter,setShopTeamFilter]=useState("ALL");const[huntPid,setHuntPid]=useState(null);const[huntDpid,setHuntDpid]=useState(null);const[huntSearch,setHuntSearch]=useState("");const[healthExpand,setHealthExpand]=useState(null);
-const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);setShopTeamFilter("ALL");setShopExclude(new Set());setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));};
+const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopExclude,setShopExclude]=useState(new Set());const[shopTeamFilter,setShopTeamFilter]=useState("ALL");const[huntPid,setHuntPid]=useState(null);const[huntDpid,setHuntDpid]=useState(null);const[huntSearch,setHuntSearch]=useState("");const[healthExpand,setHealthExpand]=useState(null);const[deepResults,setDeepResults]=useState([]);const[deepTid,setDeepTid]=useState(null);const[deepRunning,setDeepRunning]=useState(false);
+const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);setShopTeamFilter("ALL");setShopExclude(new Set());setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));setDeepResults([]);setDeepTid(null);};
 const[tSort,setTSort]=useState({my:{key:"ovr",dir:"desc"},their:{key:"ovr",dir:"desc"}});
 const fileRef=useRef(null);
 const $=dark?TH.dark:TH.light;
@@ -422,6 +422,99 @@ return{dv,msg,color,valAdd,valRemove,strategy,accepted,capBlocked,myCapAfter,the
 hasAssets:addP.length+remP.length+addDp.length+remDp.length>0};
 },[tEng,data,tradeTid,tradeMyPids,tradeTheirPids,tradeMyDpids,tradeTheirDpids]);
 
+
+const deepSearch=React.useCallback((targetTid)=>{
+if(!tEng||!data)return;
+if(shopPids.length===0&&shopDpids.length===0)return;
+setDeepRunning(true);setDeepTid(targetTid);setDeepResults([]);
+setTimeout(()=>{try{
+const myStrategy=data.teams.find(t=>t.tid===myTid)?.strategy||"contending";
+const theirStrategy=data.teams.find(t=>t.tid===targetTid)?.strategy||"contending";
+const shopPlayers=shopPids.map(pid=>tEng.playerMap.get(pid)).filter(Boolean);
+const shopPickObjs=shopDpids.map(dpid=>(data.draftPicks||[]).find(d=>d.dpid===dpid)).filter(Boolean);
+const shopAs=shopPlayers.map(p=>tEng.makePlayerAsset(p,false)).concat(shopPickObjs.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,[],[])));
+const shopVal=tEng.sumAssets(shopAs,theirStrategy,true);
+const aiPlayers=data.players.filter(p=>p.tid===targetTid).filter(p=>!shopPids.includes(p.pid));
+const aiPicks=(data.draftPicks||[]).filter(d=>d.tid===targetTid).filter(d=>!shopDpids.includes(d.dpid));
+const allResults=[];
+const saveResult=(addedPids,addedDpids,dv)=>{
+const players=addedPids.map(pid=>tEng.playerMap.get(pid)).filter(Boolean);
+const picks=addedDpids.map(dpid=>(data.draftPicks||[]).find(d=>d.dpid===dpid)).filter(Boolean);
+const team=data.teams.find(t=>t.tid===targetTid);
+const myLossAs=shopPlayers.map(p=>tEng.makePlayerAsset(p,true)).concat(shopPickObjs.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,[],[])));
+const myGetAs=players.map(p=>tEng.makePlayerAsset(p,false)).concat(picks.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,players.map(p=>p.pid),shopPids)));
+const dvMe=tEng.sumAssets(myGetAs,myStrategy,true)-tEng.sumAssets(myLossAs,myStrategy,false);
+const fp=players[0]||null;
+const key=[...addedPids].sort().join(",")+"|"+[...addedDpids].sort().join(",");
+if(allResults.some(r=>{const rk=[...r.players.map(p=>p.pid)].sort().join(",")+"|"+[...r.picks.map(d=>d.dpid)].sort().join(",");return rk===key;}))return;
+allResults.push({team,players:[...players],picks:[...picks],dvThem:dv,dvMe,
+returnOvr:players.length?Math.max(...players.map(p=>p.ovr)):0,
+returnPos:fp?fp.pos:"",returnPot:fp?fp.pot:0,return3y:fp?p3(fp.pid):0,
+returnAge:fp?fp.age:0,returnSal:fp?fp.salary:0,returnYrs:fp?fp.yrsLeft:0,
+returnVal:fp?tEng.zs((fp.value||fp.valueFuzz||0)):0,isDeep:true});};
+// Run forward selection with given asset pool
+const runPass=(assetPool)=>{
+let addedPids=[];let addedDpids=[];let prevDv=Infinity;
+for(let iter=0;iter<8;iter++){
+let bestAsset=null;let bestDv=-Infinity;
+for(const asset of assetPool){
+if(asset.type==="player"&&addedPids.includes(asset.id))continue;
+if(asset.type==="pick"&&addedDpids.includes(asset.id))continue;
+const testPids=asset.type==="player"?[...addedPids,asset.id]:addedPids;
+const testDpids=asset.type==="pick"?[...addedDpids,asset.id]:addedDpids;
+const theirAs=testPids.map(pid=>{const pl=tEng.playerMap.get(pid);return pl?tEng.makePlayerAsset(pl,true):null;}).filter(Boolean);
+const theirDpAs=testDpids.map(dpid=>{const d=(data.draftPicks||[]).find(dd=>dd.dpid===dpid);return d?tEng.makePickAsset(d,targetTid,myTid,shopPids,testPids):null;}).filter(Boolean);
+const dv=shopVal-tEng.sumAssets([...theirAs,...theirDpAs],theirStrategy,false);
+if(prevDv>0){if(dv>0&&dv<prevDv&&dv>bestDv){bestDv=dv;bestAsset=asset;}}
+else{if(dv>prevDv){if(dv>0&&(bestDv<=0||dv<bestDv)){bestDv=dv;bestAsset=asset;}
+else if(dv<=0&&dv>bestDv){bestDv=dv;bestAsset=asset;}}}
+}
+if(!bestAsset)break;
+if(bestAsset.type==="player")addedPids.push(bestAsset.id);
+else addedDpids.push(bestAsset.id);
+prevDv=bestDv;
+if(bestDv>0)saveResult([...addedPids],[...addedDpids],bestDv);
+}};
+const shopSal=shopPlayers.reduce((s,p)=>s+p.salary,0);
+// Pass 1: Players first (default order — favors cheap players)
+const pool1=[...aiPlayers.map(p=>({type:"player",id:p.pid})),...aiPicks.map(d=>({type:"pick",id:d.dpid}))];
+runPass(pool1);
+// Pass 2: Mixed - players with pick substitution (finds player+pick combos)
+// Use same pool but sort picks by round ascending (best picks first among picks)
+const pool2=[...aiPlayers.sort((a,b)=>Math.abs((a.salary||0)-shopSal)-Math.abs((b.salary||0)-shopSal)).map(p=>({type:"player",id:p.pid})),...aiPicks.sort((a,b)=>a.round-b.round||a.season-b.season).map(d=>({type:"pick",id:d.dpid}))];
+runPass(pool2);
+// Pass 3: Only picks (pure pick packages)
+const pool3=aiPicks.map(d=>({type:"pick",id:d.dpid}));
+runPass(pool3);
+// Pass 4: Augment player-only results with picks
+const augmented=[];
+for(const result of allResults){
+if(result.picks.length>0)continue;// Already has picks
+const rPids=result.players.map(p=>p.pid);
+// Try adding each pick to this package
+for(const dp of aiPicks){
+const testPids=[...rPids];
+const testDpids=[dp.dpid];
+const theirAs=testPids.map(pid=>{const pl=tEng.playerMap.get(pid);return pl?tEng.makePlayerAsset(pl,true):null;}).filter(Boolean);
+const theirDpAs=testDpids.map(dpid=>{const d=(data.draftPicks||[]).find(dd=>dd.dpid===dpid);return d?tEng.makePickAsset(d,targetTid,myTid,shopPids,testPids):null;}).filter(Boolean);
+const dv=shopVal-tEng.sumAssets([...theirAs,...theirDpAs],theirStrategy,false);
+if(dv>0)saveResult(testPids,testDpids,dv);
+// Try adding 2 picks
+for(const dp2 of aiPicks){
+if(dp2.dpid===dp.dpid)continue;
+const testDpids2=[dp.dpid,dp2.dpid];
+const theirDpAs2=testDpids2.map(dpid=>{const d=(data.draftPicks||[]).find(dd=>dd.dpid===dpid);return d?tEng.makePickAsset(d,targetTid,myTid,shopPids,testPids):null;}).filter(Boolean);
+const dv2=shopVal-tEng.sumAssets([...theirAs,...theirDpAs2],theirStrategy,false);
+if(dv2>0)saveResult(testPids,testDpids2,dv2);
+}
+}
+}
+setDeepResults(allResults);
+}catch(e){console.error("Deep search error:",e);}
+setDeepRunning(false);
+},50);
+},[tEng,data,myTid,shopPids,shopDpids,deepRunning]);
+
 const shopOffers=useMemo(()=>{
 if(!tEng||!data||(shopPids.length===0&&shopDpids.length===0))return[];
 const myStrategy=data.teams.find(t=>t.tid===myTid)?.strategy||"contending";
@@ -438,7 +531,12 @@ const shopAs=shopPlayers.map(p=>tEng.makePlayerAsset(p,false)).concat(shopPickOb
 const shopLoss=shopPlayers.map(p=>tEng.makePlayerAsset(p,true)).concat(shopPickObjs.map(dp=>tEng.makePickAsset(dp,myTid,t.tid,[],[])));
 const shopVal=tEng.sumAssets(shopAs,strategy,true);
 const myLossVal=tEng.sumAssets(shopLoss,myStrategy,false);
-const teamP=(playersByTeam.get(t.tid)||[]).sort((a,b)=>(b.value||0)-(a.value||0));
+const teamPByVal=(playersByTeam.get(t.tid)||[]).sort((a,b)=>(b.value||0)-(a.value||0));
+const shopSalary=shopPlayers.reduce((s,p)=>s+p.salary,0);
+const teamPBySalMatch=[...(playersByTeam.get(t.tid)||[])].sort((a,b)=>Math.abs(a.salary-shopSalary)-Math.abs(b.salary-shopSalary));
+const seen=new Set();const teamP=[];
+for(const p of teamPByVal){if(!seen.has(p.pid)){seen.add(p.pid);teamP.push(p);}}
+for(const p of teamPBySalMatch.slice(0,8)){if(!seen.has(p.pid)){seen.add(p.pid);teamP.push(p);}}
 const teamPicks=(picksByTeam.get(t.tid)||[]).sort((a,b)=>a.round-b.round||a.season-b.season);
 const MAX=8;const MAXP=5;
 const tryOffer=(players,picks)=>{
@@ -1627,7 +1725,8 @@ const toggleShopDpid=(dpid)=>setShopDpids(l=>l.includes(dpid)?l.filter(x=>x!==dp
 const offerSort=mSort["offers"]||{key:"dvMe",dir:"desc"};
 
 const teamFiltered=shopTeamFilter==="ALL"?shopOffers:shopOffers.filter(o=>o.team.abbrev===shopTeamFilter);
-const sortedOffers=[...teamFiltered].sort((a,b)=>{const k=offerSort.key,d=offerSort.dir;
+const combinedOffers=[...teamFiltered,...deepResults.filter(dr=>!teamFiltered.some(tf=>tf.players.length===dr.players.length&&tf.picks.length===dr.picks.length&&tf.players.every((p,i)=>dr.players[i]&&p.pid===dr.players[i].pid)))];
+const sortedOffers=[...combinedOffers].sort((a,b)=>{const k=offerSort.key,d=offerSort.dir;
 if(k==="team")return d==="asc"?a.team.abbrev.localeCompare(b.team.abbrev):b.team.abbrev.localeCompare(a.team.abbrev);
 if(k==="returnPos")return d==="asc"?(a.returnPos||"").localeCompare(b.returnPos||""):(b.returnPos||"").localeCompare(a.returnPos||"");
 const va=a[k]||0,vb=b[k]||0;return d==="asc"?va-vb:vb-va;});
@@ -1688,8 +1787,11 @@ return <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
 </div>
 {(()=>{const teams=[...new Set(shopOffers.map(o=>o.team.abbrev))].sort();
 return teams.length>1&&<div style={{display:"flex",gap:3,marginBottom:8,flexWrap:"wrap"}}>
-<button onClick={()=>setShopTeamFilter("ALL")} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopTeamFilter==="ALL"?"#3498db":$.cb}`,borderRadius:4,cursor:"pointer",background:shopTeamFilter==="ALL"?"rgba(52,152,219,0.15)":$.btn,color:shopTeamFilter==="ALL"?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopTeamFilter==="ALL"?700:400}}>ALL</button>
-{teams.map(t=><button key={t} onClick={()=>setShopTeamFilter(t===shopTeamFilter?"ALL":t)} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopTeamFilter===t?"#3498db":$.cb}`,borderRadius:4,cursor:"pointer",background:shopTeamFilter===t?"rgba(52,152,219,0.15)":$.btn,color:shopTeamFilter===t?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopTeamFilter===t?700:400}}>{t}</button>)}
+<button onClick={()=>{setShopTeamFilter("ALL");setDeepResults([]);setDeepTid(null);}} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopTeamFilter==="ALL"?"#3498db":$.cb}`,borderRadius:4,cursor:"pointer",background:shopTeamFilter==="ALL"?"rgba(52,152,219,0.15)":$.btn,color:shopTeamFilter==="ALL"?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopTeamFilter==="ALL"?700:400}}>ALL</button>
+{teams.map(t=><span key={t} style={{display:"inline-flex",gap:0}}>
+<button onClick={()=>{setShopTeamFilter(t===shopTeamFilter?"ALL":t);setDeepResults([]);setDeepTid(null);}} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopTeamFilter===t?"#3498db":$.cb}`,borderRadius:"4px 0 0 4px",cursor:"pointer",background:shopTeamFilter===t?"rgba(52,152,219,0.15)":$.btn,color:shopTeamFilter===t?"#3498db":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopTeamFilter===t?700:400}}>{t}</button>
+<button onClick={()=>{const tid=data.teams.find(tm=>tm.abbrev===t)?.tid;if(tid!==undefined){setShopTeamFilter(t);deepSearch(tid);}}} style={{padding:"2px 3px",fontSize:7,border:`1px solid ${deepTid!==null&&data.teams.find(tm=>tm.tid===deepTid)?.abbrev===t?"#e63946":$.cb}`,borderLeft:"none",borderRadius:"0 4px 4px 0",cursor:"pointer",background:deepTid!==null&&data.teams.find(tm=>tm.tid===deepTid)?.abbrev===t?"rgba(230,57,70,0.15)":$.btn,color:deepTid!==null&&data.teams.find(tm=>tm.tid===deepTid)?.abbrev===t?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif"}}>⚡</button>
+</span>)}
 </div>;})()}
 
 {shopOffers.length===0&&<div style={{color:$.t4,fontSize:12,padding:8}}>No viable trade offers found{shopExclude.size>0?" for this filter":""}.</div>}
@@ -1717,7 +1819,7 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>}
-{pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:capOver?"#e74c3c":o.dvThem>1?"#2ecc71":o.dvThem>0.3?"#2ecc71":o.dvThem>0?"#f1c40f":"#e67e22",background:capOver?"rgba(231,76,60,0.12)":o.dvThem>0.3?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{capOver?"Cap!":o.dvThem>1?"Sure ✅":o.dvThem>0.3?"Likely":o.dvThem>0?"Maybe ⚠":"Risky"}</span>}
+{pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:capOver?"#e74c3c":o.dvThem>1?"#2ecc71":o.dvThem>0.3?"#2ecc71":o.dvThem>0?"#f1c40f":"#e67e22",background:capOver?"rgba(231,76,60,0.12)":o.dvThem>0.3?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{capOver?"Cap!":o.dvThem>1?"Sure ✅":o.dvThem>0.3?"Likely":o.dvThem>0?"Maybe ⚠":"Risky"}{o.isDeep?" ⚡":""}</span>}
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{o.dvThem.toFixed(1)}</span>}
 {pi>0&&<span/>}{pi>0&&<span/>}{pi>0&&<span/>}
 </div>;})}
