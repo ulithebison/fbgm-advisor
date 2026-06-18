@@ -337,8 +337,8 @@ const[compP1,setCompP1]=useState(null);const[compP2,setCompP2]=useState(null);
 const[compS1,setCompS1]=useState("");const[compS2,setCompS2]=useState("");
 const[tradeTid,setTradeTid]=useState(null);const[tradeMyPids,setTradeMyPids]=useState([]);const[tradeTheirPids,setTradeTheirPids]=useState([]);
 const[tradeMyDpids,setTradeMyDpids]=useState([]);const[tradeTheirDpids,setTradeTheirDpids]=useState([]);
-const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopFilter,setShopFilter]=useState("ALL");const[shopTeamFilter,setShopTeamFilter]=useState("ALL");const[huntPid,setHuntPid]=useState(null);const[huntDpid,setHuntDpid]=useState(null);const[huntSearch,setHuntSearch]=useState("");const[healthExpand,setHealthExpand]=useState(null);
-const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);setShopTeamFilter("ALL");setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));};
+const[tradeMode,setTradeMode]=useState("checker");const[shopPids,setShopPids]=useState([]);const[shopDpids,setShopDpids]=useState([]);const[shopExclude,setShopExclude]=useState(new Set());const[shopTeamFilter,setShopTeamFilter]=useState("ALL");const[huntPid,setHuntPid]=useState(null);const[huntDpid,setHuntDpid]=useState(null);const[huntSearch,setHuntSearch]=useState("");const[healthExpand,setHealthExpand]=useState(null);
+const goShop=(pid)=>{setTab("trades");setTradeMode("finder");setShopPids([pid]);setShopDpids([]);setShopTeamFilter("ALL");setShopExclude(new Set());setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));};
 const[tSort,setTSort]=useState({my:{key:"ovr",dir:"desc"},their:{key:"ovr",dir:"desc"}});
 const fileRef=useRef(null);
 const $=dark?TH.dark:TH.light;
@@ -487,11 +487,9 @@ for(const tp of teamP.slice(0,4)){for(let i=0;i<Math.min(teamPicks.length,3);i++
 // 5 picks
 for(let i=0;i<Math.min(teamPicks.length,3);i++){for(let j=i+1;j<Math.min(teamPicks.length,3);j++){for(let k=j+1;k<Math.min(teamPicks.length,3);k++){for(let l=k+1;l<Math.min(teamPicks.length,3);l++){for(let m=l+1;m<Math.min(teamPicks.length,3);m++)tryOffer([],[teamPicks[i],teamPicks[j],teamPicks[k],teamPicks[l],teamPicks[m]]);}}}}
 });
-let filtered=offers;
-if(shopFilter==="PICKS")filtered=offers.filter(o=>o.players.length===0&&o.picks.length>0);
-else if(shopFilter!=="ALL")filtered=offers.filter(o=>o.players.some(p=>p.pos===shopFilter));
+let filtered=shopExclude.has("_PICKS")?offers.filter(o=>o.players.length===0&&o.picks.length>0):(shopExclude.size>0?offers.filter(o=>!o.players.some(p=>shopExclude.has(p.pos))):offers);
 return filtered.sort((a,b)=>b.dvMe-a.dvMe).slice(0,100);
-},[shopPids,shopDpids,shopFilter,data,tEng,myTid]);
+},[shopPids,shopDpids,shopExclude,data,tEng,myTid]);
 const huntOffers=useMemo(()=>{
 if(!tEng||!data||(!huntPid&&!huntDpid))return[];
 // Target can be a player or a pick
@@ -1506,7 +1504,7 @@ const cap2=data.capSettings?.salaryCap||0;
 
 return <>
 <div style={{display:"flex",gap:6,marginBottom:12}}>
-{["checker","finder","hunter"].map(m=><button key={m} onClick={()=>{setTradeMode(m);if(m==="finder")setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));if(m==="hunter"){setMSort(ms=>({...ms,hunt:{key:"dvThem",dir:"asc"}}));setHuntPid(null);setHuntDpid(null);setHuntSearch("");}}} style={{flex:1,padding:"8px",border:"none",cursor:"pointer",fontSize:12,fontWeight:tradeMode===m?700:500,fontFamily:"'DM Sans',sans-serif",background:tradeMode===m?$.acc:"transparent",color:tradeMode===m?"#e63946":$.tabi,borderBottom:tradeMode===m?"2px solid #e63946":"2px solid transparent",borderRadius:"6px 6px 0 0"}}>{m==="checker"?"🔄 Trade Checker":m==="finder"?"🔍 Shop Player":"🎯 Find Player"}</button>)}
+{["checker","finder","hunter"].map(m=><button key={m} onClick={()=>{setTradeMode(m);if(m==="finder"){setMSort(ms=>({...ms,shop:{key:"ovr",dir:"desc"}}));setShopExclude(new Set());};if(m==="hunter"){setMSort(ms=>({...ms,hunt:{key:"dvThem",dir:"asc"}}));setHuntPid(null);setHuntDpid(null);setHuntSearch("");}}} style={{flex:1,padding:"8px",border:"none",cursor:"pointer",fontSize:12,fontWeight:tradeMode===m?700:500,fontFamily:"'DM Sans',sans-serif",background:tradeMode===m?$.acc:"transparent",color:tradeMode===m?"#e63946":$.tabi,borderBottom:tradeMode===m?"2px solid #e63946":"2px solid transparent",borderRadius:"6px 6px 0 0"}}>{m==="checker"?"🔄 Trade Checker":m==="finder"?"🔍 Shop Player":"🎯 Find Player"}</button>)}
 </div>
 
 {tradeMode==="checker"&&<>
@@ -1554,7 +1552,7 @@ background:tradeMyPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",bord
 return <div key={"dp"+dp.dpid} onClick={()=>toggleDpid(dp.dpid,tradeMyDpids,setTradeMyDpids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:tradeMyDpids.includes(dp.dpid)?"rgba(230,57,70,0.12)":"rgba(241,196,15,0.04)",border:tradeMyDpids.includes(dp.dpid)?"1px solid rgba(230,57,70,0.3)":"1px solid rgba(241,196,15,0.15)"}}>
 <span style={{fontSize:10,color:tradeMyDpids.includes(dp.dpid)?"#e63946":$.t3}}>{tradeMyDpids.includes(dp.dpid)?"✓":"○"}</span>
-<span style={{fontWeight:600,color:tradeMyDpids.includes(dp.dpid)?"#e63946":"#f1c40f"}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}</span>
+<span style={{fontWeight:600,color:tradeMyDpids.includes(dp.dpid)?"#e63946":"#f1c40f"}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}{(()=>{const ot=data.teams.find(t=>t.tid===dp.originalTid);if(!ot)return"";const ls=ot.seasons&&ot.seasons.length?ot.seasons[ot.seasons.length-1]:null;const w=ls?ls.won:(ot.won||0);const l=ls?ls.lost:(ot.lost||0);return w+l>0?` ${w}-${l}`:"";})()}</span>
 <span style={{...M,fontSize:8,color:"#f1c40f",textAlign:"center"}}>PICK</span>
 <span/><span/><span/><span/><span style={{...M,fontSize:9,color:"#f1c40f",textAlign:"right"}}>{tEng?(()=>{const a=tEng.makePickAsset(dp,myTid,null,[],[]);return a.val.toFixed(1);})():""}</span>
 </div>;})}
@@ -1582,7 +1580,7 @@ background:tradeTheirPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",b
 return <div key={"dp"+dp.dpid} onClick={()=>toggleDpid(dp.dpid,tradeTheirDpids,setTradeTheirDpids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:tradeTheirDpids.includes(dp.dpid)?"rgba(230,57,70,0.12)":"rgba(241,196,15,0.04)",border:tradeTheirDpids.includes(dp.dpid)?"1px solid rgba(230,57,70,0.3)":"1px solid rgba(241,196,15,0.15)"}}>
 <span style={{fontSize:10,color:tradeTheirDpids.includes(dp.dpid)?"#e63946":$.t3}}>{tradeTheirDpids.includes(dp.dpid)?"✓":"○"}</span>
-<span style={{fontWeight:600,color:tradeTheirDpids.includes(dp.dpid)?"#e63946":"#f1c40f"}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}</span>
+<span style={{fontWeight:600,color:tradeTheirDpids.includes(dp.dpid)?"#e63946":"#f1c40f"}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}{(()=>{const ot=data.teams.find(t=>t.tid===dp.originalTid);if(!ot)return"";const ls=ot.seasons&&ot.seasons.length?ot.seasons[ot.seasons.length-1]:null;const w=ls?ls.won:(ot.won||0);const l=ls?ls.lost:(ot.lost||0);return w+l>0?` ${w}-${l}`:"";})()}</span>
 <span style={{...M,fontSize:8,color:"#f1c40f",textAlign:"center"}}>PICK</span>
 <span/><span/><span/><span/><span style={{...M,fontSize:9,color:"#f1c40f",textAlign:"right"}}>{tEng?(()=>{const a=tEng.makePickAsset(dp,tradeTid,myTid,[],[]);return a.val.toFixed(1);})():""}</span>
 </div>;})}
@@ -1658,7 +1656,7 @@ const pVal=tEng?(()=>{const a=tEng.makePickAsset(dp,myTid,null,[],[]);return a.v
 return <div key={"sdp"+dp.dpid} onClick={()=>toggleShopDpid(dp.dpid)} style={{display:"grid",gridTemplateColumns:grid2,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:shopDpids.includes(dp.dpid)?"rgba(230,57,70,0.15)":"rgba(241,196,15,0.04)",borderLeft:shopDpids.includes(dp.dpid)?"3px solid #e63946":"3px solid transparent",border:shopDpids.includes(dp.dpid)?"1px solid rgba(230,57,70,0.3)":"1px solid rgba(241,196,15,0.15)"}}>
 <span style={{fontSize:10,color:shopDpids.includes(dp.dpid)?"#e63946":$.t3}}>{shopDpids.includes(dp.dpid)?"✓":"○"}</span>
-<span style={{fontWeight:600,color:shopDpids.includes(dp.dpid)?"#e63946":"#f1c40f"}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}</span>
+<span style={{fontWeight:600,color:shopDpids.includes(dp.dpid)?"#e63946":"#f1c40f"}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}{(()=>{const ot=data.teams.find(t=>t.tid===dp.originalTid);if(!ot)return"";const ls=ot.seasons&&ot.seasons.length?ot.seasons[ot.seasons.length-1]:null;const w=ls?ls.won:(ot.won||0);const l=ls?ls.lost:(ot.lost||0);return w+l>0?` ${w}-${l}`:"";})()}</span>
 <span style={{...M,fontSize:8,color:"#f1c40f",textAlign:"center"}}>PICK</span>
 <span/><span/><span/><span/><span/><span/>
 <span style={{...M,fontSize:9,color:"#f1c40f",textAlign:"right"}}>{pVal.toFixed(1)}</span>
@@ -1673,7 +1671,13 @@ Offers for {[...shopPids.map(pid=>{const p=data.players.find(x=>x.pid===pid);ret
 </div>
 </div>
 <div style={{display:"flex",gap:3,marginBottom:4,flexWrap:"wrap"}}>
-{posOpts.map(f=><button key={f} onClick={()=>setShopFilter(f)} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopFilter===f?"#e63946":$.cb}`,borderRadius:4,cursor:"pointer",background:shopFilter===f?"rgba(230,57,70,0.15)":$.btn,color:shopFilter===f?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopFilter===f?700:400}}>{f}</button>)}
+{(()=>{const positions=["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];
+return <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+<button onClick={()=>setShopExclude(new Set())} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopExclude.size===0&&!shopExclude.has("_PICKS")?"#2ecc71":$.cb}`,borderRadius:4,cursor:"pointer",background:shopExclude.size===0&&!shopExclude.has("_PICKS")?"rgba(46,204,113,0.15)":$.btn,color:shopExclude.size===0&&!shopExclude.has("_PICKS")?"#2ecc71":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopExclude.size===0?700:400}}>ALL</button>
+{positions.map(p=>{const excluded=shopExclude.has(p);return <button key={p} onClick={()=>setShopExclude(s=>{const n=new Set(s);n.delete("_PICKS");if(n.has(p))n.delete(p);else n.add(p);return n;})} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${excluded?"#e74c3c":$.cb}`,borderRadius:4,cursor:"pointer",background:excluded?"rgba(231,76,60,0.1)":$.btn,color:excluded?"#e74c3c":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:400,textDecoration:excluded?"line-through":"none",opacity:excluded?0.5:1}}>{p}</button>;})}
+<button onClick={()=>setShopExclude(new Set(["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"]))} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopExclude.size>=11&&!shopExclude.has("_PICKS")?"#e74c3c":$.cb}`,borderRadius:4,cursor:"pointer",background:shopExclude.size>=11?"rgba(231,76,60,0.15)":$.btn,color:shopExclude.size>=11?"#e74c3c":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopExclude.size>=11?700:400}}>NONE</button>
+<button onClick={()=>setShopExclude(new Set(["_PICKS"]))} style={{padding:"2px 6px",fontSize:9,border:`1px solid ${shopExclude.has("_PICKS")?"#f1c40f":$.cb}`,borderRadius:4,cursor:"pointer",background:shopExclude.has("_PICKS")?"rgba(241,196,15,0.15)":$.btn,color:shopExclude.has("_PICKS")?"#f1c40f":$.t5,fontFamily:"'DM Sans',sans-serif",fontWeight:shopExclude.has("_PICKS")?700:400}}>PICKS only</button>
+</div>;})()}
 </div>
 {(()=>{const teams=[...new Set(shopOffers.map(o=>o.team.abbrev))].sort();
 return teams.length>1&&<div style={{display:"flex",gap:3,marginBottom:8,flexWrap:"wrap"}}>
@@ -1712,10 +1716,9 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 </div>;})}
 {o.picks.map((dp,di)=><div key={dp.dpid} style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
 <span style={{...M,fontWeight:700,fontSize:10,color:$.t,textAlign:"center"}}>{o.players.length===0&&di===0?team.abbrev:""}</span>
-<span style={{color:"#f1c40f",fontWeight:600}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}</span>
+<span style={{color:"#f1c40f",fontWeight:600}}>{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{(()=>{const ot=data.teams.find(t=>t.tid===dp.originalTid);if(!ot)return"";const from=dp.originalTid!==o.team.tid?` via ${ot.abbrev}`:"";const ls=ot.seasons&&ot.seasons.length?ot.seasons[ot.seasons.length-1]:null;const w=ls?ls.won:(ot.won||0);const l=ls?ls.lost:(ot.lost||0);return`${from}${w+l>0?` ${w}-${l}`:""}`;})()}</span>
 <span style={{...M,fontSize:8,color:"#f1c40f",textAlign:"center"}}>PICK</span>
 <span/><span/><span/><span/><span/><span/>
-{o.players.length===0&&di===0&&<span style={{...M,fontSize:9,color:"#f1c40f",textAlign:"center"}}>{tEng?(()=>{const a=tEng.makePickAsset(dp,o.team.tid,myTid,[],[]);return a.val.toFixed(1);})():""}</span>}
 {o.players.length===0&&di===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:o.dvThem>1?"#2ecc71":o.dvThem>0.3?"#2ecc71":o.dvThem>0?"#f1c40f":"#e67e22",background:o.dvThem>0.3?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{o.dvThem>1?"Sure ✅":o.dvThem>0.3?"Likely":o.dvThem>0?"Maybe ⚠":"Risky"}</span>}
 {o.players.length===0&&di===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{o.dvThem.toFixed(1)}</span>}
 {(o.players.length>0||di>0)&&<span/>}{(o.players.length>0||di>0)&&<span/>}{(o.players.length>0||di>0)&&<span/>}
@@ -1770,7 +1773,7 @@ if(!teamPicks.length)return null;
 return <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
 {teamPicks.filter(dp=>dp.round<=4).map(dp=>{const from=dp.originalTid!==dp.tid?data.teams.find(t=>t.tid===dp.originalTid):null;
 return <div key={dp.dpid} onClick={()=>{setHuntDpid(dp.dpid);setHuntPid(null);setHuntSearch("");}} style={{padding:"4px 10px",fontSize:11,cursor:"pointer",borderRadius:5,fontWeight:600,background:"rgba(241,196,15,0.08)",border:"1px solid rgba(241,196,15,0.2)",color:"#f1c40f"}}>
-{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}
+{dp.season} R{dp.round}{dp.pick>0?` P${dp.pick}`:""}{from?` via ${from.abbrev}`:""}{(()=>{const ot=data.teams.find(t=>t.tid===dp.originalTid);if(!ot)return"";const ls=ot.seasons&&ot.seasons.length?ot.seasons[ot.seasons.length-1]:null;const w=ls?ls.won:(ot.won||0);const l=ls?ls.lost:(ot.lost||0);return w+l>0?` ${w}-${l}`:"";})()}
 </div>;})}
 </div>;})()}
 </div>}
@@ -1814,7 +1817,7 @@ return <div key={dp.dpid} onClick={()=>{setHuntDpid(dp.dpid);setHuntPid(null);se
 {pi>0&&<span/>}{pi>0&&<span/>}{pi>0&&<span/>}
 </div>)}
 {o.picks.map((dp,di)=><div key={dp.dpid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 28px 28px 24px 40px 24px 30px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
-<span style={{color:"#f1c40f",fontWeight:600}}>{dp.season} R{dp.round}{dp.pick>0?" P"+dp.pick:""}</span>
+<span style={{color:"#f1c40f",fontWeight:600}}>{dp.season} R{dp.round}{dp.pick>0?" P"+dp.pick:""}{(()=>{const ot=data.teams.find(t=>t.tid===dp.originalTid);if(!ot)return"";const ls=ot.seasons&&ot.seasons.length?ot.seasons[ot.seasons.length-1]:null;const w=ls?ls.won:(ot.won||0);const l=ls?ls.lost:(ot.lost||0);return w+l>0?` ${w}-${l}`:"";})()}{(()=>{const orig=data.teams.find(t=>t.tid===dp.originalTid);if(!orig)return"";const s=orig.seasons&&orig.seasons.length?orig.seasons[orig.seasons.length-1]:null;const w=s?s.won:orig.won||0;const l=s?s.lost:orig.lost||0;return(w+l>0?` (${w}-${l})`:"");})()}</span>
 <span style={{...M,fontSize:8,color:"#f1c40f",textAlign:"center"}}>PICK</span>
 <span/><span/><span/><span/><span/><span/><span/><span/>
 </div>)}
