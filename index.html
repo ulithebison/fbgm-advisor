@@ -141,8 +141,8 @@ return{tid:t.tid,wp};});
 wps.sort((a,b)=>a.wp-b.wp);
 wps.forEach((w,i)=>{estPicks[w.tid]=i+1;});
 // Pick values from undrafted prospects
-const prospects=data.players.filter(p=>p.tid===-2).sort((a,b)=>(b.value||0)-(a.value||0));
-const picksByYear={};prospects.forEach(p=>{const y=p.draftYear||data.season;if(!picksByYear[y])picksByYear[y]=[];picksByYear[y].push(p.value||p.valueFuzz||0);});
+const prospects=data.players.filter(p=>p.tid===-2).sort((a,b)=>(b.valueFuzz||b.value||0)-(a.valueFuzz||a.value||0));
+const picksByYear={};prospects.forEach(p=>{const y=p.draftYear||data.season;if(!picksByYear[y])picksByYear[y]=[];picksByYear[y].push(p.valueFuzz||p.value||0);});
 const numPicksTotal=numTeams*(data.numDraftRounds||7);
 const defaultPickVals=(()=>{const years=Object.keys(picksByYear);
 return Array.from({length:numPicksTotal},(_,i)=>{const vals=years.map(y=>(picksByYear[y]||[])[i]).filter(v=>v!==undefined);return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;});})();
