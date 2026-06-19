@@ -20,7 +20,7 @@ button{font-family:inherit}
 </style>
 </head>
 <body>
-<div id="root"></div>
+<div id="root"><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:#0d1117;font-family:'DM Sans',sans-serif"><style>@keyframes spin{to{transform:rotate(360deg)}}</style><div style="width:36px;height:36px;border:3px solid rgba(255,255,255,0.1);border-top-color:#e63946;border-radius:50%;animation:spin .8s linear infinite"></div><p style="margin-top:14px;color:rgba(255,255,255,0.5);font-size:13px;letter-spacing:1px">Loading FBGM Advisor…</p></div></div>
 <script type="text/babel">
 const {useState,useMemo,useCallback,useRef,useEffect}=React;
 
@@ -392,6 +392,7 @@ return{pos:n.pos,grade:n.g,gradeColor:n.c,diff:n.diff,avgOvr:n.avgOvr,la:n.la,pl
 const tEng=useMemo(()=>{if(!data)return null;const d={...data,userTid:data.userTid??myTid};return tradeCalc(d);},[data,myTid]);
 const projMap=useMemo(()=>{if(!data)return{};const m={};data.players.forEach(p=>{try{const pr=projectRatings(p.rt,p.age,3,progMode);m[p.pid]=pr[2]?.ovr||p.ovr;}catch(e){m[p.pid]=p.ovr;}});return m;},[data,progMode]);
 const teamMap=useMemo(()=>data?new Map(data.teams.map(t=>[t.tid,t])):new Map(),[data]);
+const pwrRank=useMemo(()=>{if(!data)return null;const posRankOrder=["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];const td=data.teams.filter(t=>t.tid>=0).map(t=>{const tp=data.players.filter(p=>p.tid===t.tid);const teamOvrRaw=calcTeamVal(tp.map(p=>({pos:p.pos,val:p.ovr})));const teamOvr=Math.round((teamOvrRaw*100)/20+42);const posOvrs={};posRankOrder.forEach(pos=>{const pp=tp.filter(p=>p.pos===pos);const starters=(TPW[pos]||[1]).length;const top=pp.sort((a,b)=>b.ovr-a.ovr).slice(0,starters);posOvrs[pos]=top.length?Math.round(top.reduce((s,p)=>s+p.ovr,0)/top.length):0;});const avgAge=tp.length?Math.round(tp.reduce((s,p)=>s+p.age,0)/tp.length*10)/10:0;const numGames=data.numGames||17;const gp=t.won+t.lost;const prevS=t.seasons&&t.seasons.length>=2?t.seasons[t.seasons.length-2]:null;const dispWon=gp>0?t.won:(prevS?prevS.won:0);const dispLost=gp>0?t.lost:(prevS?prevS.lost:0);const winPct=gp>0?t.won/gp:(prevS&&(prevS.won+prevS.lost)>0?prevS.won/(prevS.won+prevS.lost):0.5);const estimatedMOV=teamOvrRaw;const recentBonus=-10+20*winPct;const score=estimatedMOV+recentBonus;return{...t,teamOvr,posOvrs,avgAge,score,playerCount:tp.length,dispWon,dispLost,top:tp.sort((a,b)=>b.ovr-a.ovr).slice(0,3)};});const posRanks={};posRankOrder.forEach(pos=>{const sorted=[...td].sort((a,b)=>(b.posOvrs[pos]||0)-(a.posOvrs[pos]||0));sorted.forEach((t,i)=>{if(!posRanks[t.tid])posRanks[t.tid]={};posRanks[t.tid][pos]=i+1;});});td.forEach(t=>t.posRanks=posRanks[t.tid]||{});td.sort((a,b)=>b.teamOvr-a.teamOvr);td.forEach((t,i)=>t.rank=i+1);const maxOvr=Math.max(...td.map(t=>t.teamOvr));const minOvr=Math.min(...td.map(t=>t.teamOvr));return{td,maxOvr,minOvr,posRankOrder};},[data]);
 const p3=pid=>projMap[pid]||0;
 const tradeEval=useMemo(()=>{
 if(!tEng||!data||tradeTid===null)return null;
@@ -946,34 +947,7 @@ Formulas extracted from <span style={{color:$.t4}}>zengm-games/zengm</span> · O
 
 // ─── TEAM SELECT ────────────────────────────────────
 if(!tSel){
-const posRankOrder=["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];
-const td=data.teams.filter(t=>t.tid>=0).map(t=>{
-const tp=data.players.filter(p=>p.tid===t.tid);
-const teamOvrRaw=calcTeamVal(tp.map(p=>({pos:p.pos,val:p.ovr})));const teamOvr=Math.round((teamOvrRaw*100)/20+42);
-// Position OVRs for ranks
-const posOvrs={};posRankOrder.forEach(pos=>{const pp=tp.filter(p=>p.pos===pos);
-const starters=(TPW[pos]||[1]).length;const top=pp.sort((a,b)=>b.ovr-a.ovr).slice(0,starters);
-posOvrs[pos]=top.length?Math.round(top.reduce((s,p)=>s+p.ovr,0)/top.length):0;});
-// Avg age
-const avgAge=tp.length?Math.round(tp.reduce((s,p)=>s+p.age,0)/tp.length*10)/10:0;
-// Approx power score (without MOV)
-const numGames=data.numGames||17;const gp=t.won+t.lost;
-// Use prev season W-L if current is 0-0
-const prevS=t.seasons&&t.seasons.length>=2?t.seasons[t.seasons.length-2]:null;
-const dispWon=gp>0?t.won:(prevS?prevS.won:0);const dispLost=gp>0?t.lost:(prevS?prevS.lost:0);
-const winPct=gp>0?t.won/gp:(prevS&&(prevS.won+prevS.lost)>0?prevS.won/(prevS.won+prevS.lost):0.5);
-const estimatedMOV=teamOvrRaw;// already MOV scale
-const recentBonus=-10+20*winPct;
-const score=estimatedMOV+recentBonus;
-return{...t,teamOvr,posOvrs,avgAge,score,playerCount:tp.length,dispWon,dispLost,top:tp.sort((a,b)=>b.ovr-a.ovr).slice(0,3)};});
-// Calculate position ranks across all teams
-const posRanks={};posRankOrder.forEach(pos=>{
-const sorted=[...td].sort((a,b)=>(b.posOvrs[pos]||0)-(a.posOvrs[pos]||0));
-sorted.forEach((t,i)=>{if(!posRanks[t.tid])posRanks[t.tid]={};posRanks[t.tid][pos]=i+1;});});
-td.forEach(t=>t.posRanks=posRanks[t.tid]||{});
-td.sort((a,b)=>b.teamOvr-a.teamOvr);
-td.forEach((t,i)=>t.rank=i+1);
-const maxOvr=Math.max(...td.map(t=>t.teamOvr));const minOvr=Math.min(...td.map(t=>t.teamOvr));
+const{td,maxOvr,minOvr,posRankOrder}=pwrRank||{td:[],maxOvr:0,minOvr:0,posRankOrder:[]};
 return(<div style={{padding:"24px 16px",maxWidth:800,margin:"0 auto"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h1 style={{...H,fontSize:22,letterSpacing:2,background:"linear-gradient(135deg,#e63946,#f4a261,#2a9d8f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><ThemeBtn/></div>
 <p style={{textAlign:"center",fontSize:12,color:$.t5,margin:"0 0 4px",...M}}>Season {data.season} · {data.players.length} players</p>
