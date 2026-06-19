@@ -163,11 +163,11 @@ let rank=otherWps.findIndex(w=>wp<w.wp);if(rank===-1)rank=otherWps.length;
 return rank+1;};
 // Make player asset (source: getPlayers) - isRemove applies fudge
 const makePlayerAsset=(p,isRemove,isUserTrade=true)=>{
-const trueVal=p.value||p.valueFuzz||0;
-let normVal=zs(trueVal);
+const aiVal=p.valueFuzz||p.value||0;
+let normVal=zs(aiVal);
 // Fudge: AI overvalues what it gives up (only positive values)
 if(isRemove&&normVal>0)normVal*=(isUserTrade?fudgeUser:fudgeAI);
-const cv=contractVal(p.salary||0,p.expYear||0,zs(trueVal));
+const cv=contractVal(p.salary||0,p.expYear||0,zs(aiVal));
 // Injury discount (source)
 const inj=p.injury?.gamesRemaining||0;
 let injDiscount=0;if(inj>75)injDiscount=0.75;else injDiscount=inj/100;
@@ -312,7 +312,7 @@ if(Array.isArray(raw)){pl=raw;tm=[];se=new Date().getFullYear();}else if(raw.pla
 pl=pl.filter(p=>p.tid===undefined||p.tid>=-2);
 const pr=pl.map(p=>{const r=p.ratings&&p.ratings.length>0?p.ratings[p.ratings.length-1]:null;if(!r)return null;const rt={};RK.forEach(k=>rt[k]=r[k]||0);rt.pos=r.pos||p.pos||"QB";const age=p.born?se-p.born.year:25;const ct=p.contract||{};const sal=ct.amount||0;const exp=ct.exp||0;const yl=exp?exp-se:0;
 const pos=r.pos||p.pos||"QB";const fz=r.fuzz||0;const ovr=bd(Math.round(r.ovr||0),0,100);const pot=bd(Math.round(r.pot||r.ovr||0),0,100);const trueOvr=ovr;const truePot=pot;const fuzzedOvr=bd(Math.round((r.ovr||0)+fz),0,100);const fuzzedPot=bd(Math.round((r.pot||r.ovr||0)+fz),0,100);
-return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,trueOvr,truePot,potGap:pot-ovr,ovrDiff:(trueOvr||0)-(fuzzedOvr||0),potDiff:(truePot||0)-(fuzzedPot||0),phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,value:p.value||p.valueFuzz||0,valueFuzz:p.valueFuzz||p.value||0,injury:p.injury||{type:"Healthy",gamesRemaining:0},rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
+return{pid:p.pid||Math.random(),name:`${p.firstName||"?"} ${p.lastName||"?"}`,age,tid:p.tid===undefined?-1:p.tid,pos,ovr,pot,trueOvr,truePot,fuzzedOvr,fuzzedPot,potGap:pot-ovr,ovrDiff:(trueOvr||0)-(fuzzedOvr||0),potDiff:(truePot||0)-(fuzzedPot||0),phase:aP(age,pos),draftYear:p.draft?.year||null,salary:sal,expYear:exp,yrsLeft:yl,expiring:yl<=0&&p.tid>=0,value:p.value||p.valueFuzz||0,valueFuzz:p.valueFuzz||p.value||0,injury:p.injury||{type:"Healthy",gamesRemaining:0},rt,statsTids:p.statsTids||[],draft:p.draft||null};}).filter(Boolean);
 let tl=tm.map(t=>{const s=t.seasons&&t.seasons.length>0?t.seasons[t.seasons.length-1]:null;return{tid:t.tid,name:`${t.region||""} ${t.name||""}`.trim(),abbrev:t.abbrev||`T${t.tid}`,won:s?s.won:0,lost:s?s.lost:0,strategy:t.strategy||"contending",seasons:t.seasons||[]};});
 if(!tl.length){const ts=[...new Set(pr.filter(p=>p.tid>=0).map(p=>p.tid))].sort((a,b)=>a-b);tl=ts.map(t=>({tid:t,name:`Team ${t}`,abbrev:`T${t}`,won:0,lost:0,strategy:"contending",seasons:[]}));}
 const difficulty=gA(raw.gameAttributes,"difficulty")??0;const phase=gA(raw.gameAttributes,"phase")??-1;const numGames=gA(raw.gameAttributes,"numGames")||17;const numDraftRounds=gA(raw.gameAttributes,"numDraftRounds")||7;
@@ -332,7 +332,7 @@ function App(){
 const[data,setData]=useState(null);const[err,setErr]=useState(null);const[myTid,setMyTid]=useState(null);
 const[tSel,setTSel]=useState(false);const[tab,setTab]=useState("roster");const[pf,setPf]=useState("ALL");
 const[sort,setSort]=useState({key:"ovr",dir:"desc"});const[dyf,setDyf]=useState("ALL");
-const[drag,setDrag]=useState(false);const[dark,setDark]=useState(true);const[selP,setSelP]=useState(null);const[progMode,setProgMode]=useState("default");
+const[drag,setDrag]=useState(false);const[dark,setDark]=useState(true);const[selP,setSelP]=useState(null);const[progMode,setProgMode]=useState("default");const[godMode,setGodMode]=useState(false);
 const[mockRes,setMockRes]=useState(null);const[posSort,setPosSort]=useState({});const[mSort,setMSort]=useState({});
 const[compMode,setCompMode]=useState("team");const[compTid,setCompTid]=useState(null);
 const[compP1,setCompP1]=useState(null);const[compP2,setCompP2]=useState(null);
@@ -371,19 +371,20 @@ const cTab=t=>{setTab(t);setPf("ALL");setSort({key:t==="draft"?"draftRank":t==="
 const dSort=useCallback(l=>[...l].sort((a,b)=>{let va=a[sort.key],vb=b[sort.key];if(typeof va==="string")return sort.dir==="asc"?va.localeCompare(vb):vb.localeCompare(va);return sort.dir==="asc"?(va-vb):(vb-va);}),[sort]);
 const dFilt=useCallback(l=>{if(pf==="ALL")return l;if(["OFF","DEF","ST"].includes(pf))return l.filter(p=>GM[p.pos]===pf);return l.filter(p=>p.pos===pf);},[pf]);
 
-const myP=useMemo(()=>data?data.players.filter(p=>p.tid===myTid):[],[data,myTid]);
-const fas=useMemo(()=>data?data.players.filter(p=>p.tid===-1):[],[data]);
-const dps=useMemo(()=>{if(!data)return[];const r=data.players.filter(p=>p.tid===-2);const by={};r.forEach(p=>{const y=p.draftYear||0;if(!by[y])by[y]=[];by[y].push(p);});Object.keys(by).forEach(y=>{by[y].sort((a,b)=>b.valueFuzz-a.valueFuzz);by[y].forEach((p,i)=>{p.draftRank=i+1;});});return r;},[data]);
+const vP=useMemo(()=>{if(!data)return[];return data.players.map(p=>godMode?p:{...p,ovr:p.fuzzedOvr,pot:p.fuzzedPot,potGap:p.fuzzedPot-p.fuzzedOvr});},[data,godMode]);
+const myP=useMemo(()=>vP.filter(p=>p.tid===myTid),[vP,myTid]);
+const fas=useMemo(()=>vP.filter(p=>p.tid===-1),[vP]);
+const dps=useMemo(()=>{if(!vP.length)return[];const r=vP.filter(p=>p.tid===-2);const by={};r.forEach(p=>{const y=p.draftYear||0;if(!by[y])by[y]=[];by[y].push(p);});Object.keys(by).forEach(y=>{by[y].sort((a,b)=>b.valueFuzz-a.valueFuzz);by[y].forEach((p,i)=>{p.draftRank=i+1;});});return r;},[vP]);
 const dY=useMemo(()=>[...new Set(dps.map(p=>p.draftYear).filter(Boolean))].sort(),[dps]);
 const expP=useMemo(()=>myP.filter(p=>p.expiring).sort((a,b)=>b.ovr-a.ovr),[myP]);
-const lA=useMemo(()=>{if(!data)return{};const a={};PP.forEach(pos=>{const sc=(TPW[pos]||[1]).length;const ta=[];data.teams.forEach(t=>{const tp=data.players.filter(p=>p.tid===t.tid&&p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,sc);if(tp.length>0)ta.push(tp.reduce((s,p)=>s+p.ovr,0)/tp.length);});a[pos]=ta.length>0?Math.round(ta.reduce((a,b)=>a+b,0)/ta.length):0;});return a;},[data]);
+const lA=useMemo(()=>{if(!data||!vP.length)return{};const a={};PP.forEach(pos=>{const sc=(TPW[pos]||[1]).length;const ta=[];data.teams.forEach(t=>{const tp=vP.filter(p=>p.tid===t.tid&&p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,sc);if(tp.length>0)ta.push(tp.reduce((s,p)=>s+p.ovr,0)/tp.length);});a[pos]=ta.length>0?Math.round(ta.reduce((a,b)=>a+b,0)/ta.length):0;});return a;},[data,vP]);
 const pGr=useMemo(()=>{if(!myP.length)return{};const g={};PP.forEach(pos=>{const pp=myP.filter(p=>p.pos===pos).sort((a,b)=>b.ovr-a.ovr);const sc=(TPW[pos]||[1]).length;const st=pp.slice(0,sc);const ao=st.length>0?Math.round(st.reduce((s,p)=>s+p.ovr,0)/st.length):0;const la=lA[pos]||0;g[pos]={...pG(ao),avgOvr:ao,count:pp.length,sc,tw:(TPW[pos]||[]).reduce((a,b)=>a+b,0),la,diff:ao-la};});return g;},[myP,lA]);
 const nR=useMemo(()=>Object.entries(pGr).map(([pos,g])=>{const sh=Math.max(0,PSC[pos]-g.count);const belowAvg=Math.max(0,g.la-g.avgOvr);return{pos,...g,score:belowAvg*g.tw*10*(1+(sh/PSC[pos])*3)+sh*50+(g.diff<0?Math.abs(g.diff)*g.tw*5:0),shortage:sh};}).sort((a,b)=>b.score-a.score),[pGr]);
 const faN=useMemo(()=>{if(!fas.length||!nR.length)return fas;const nm={};nR.forEach((n,i)=>{nm[n.pos]=nR.length-i;});return[...fas].sort((a,b)=>((nm[b.pos]||0)*b.ovr)-((nm[a.pos]||0)*a.ovr));},[fas,nR]);
 const tr=useMemo(()=>{if(!myP.length)return{sell:[],keep:[]};const sell=myP.filter(p=>{const sp=["RB","CB","WR","S"].includes(p.pos);if(sp&&p.age>=27&&p.ovr>=55)return true;if(!sp&&p.age>=30&&p.ovr>=55)return true;return p.age>=32;}).sort((a,b)=>b.ovr-a.ovr);const keep=myP.filter(p=>p.age<=25&&p.pot>=65&&p.potGap>=8).sort((a,b)=>b.potGap-a.potGap);return{sell,keep};},[myP]);
 
 const fillGap=useMemo(()=>{if(!data||!Object.keys(pGr).length||!nR.length)return[];
-const fas=data.players.filter(p=>p.tid===-1);
+const fas=vP.filter(p=>p.tid===-1);
 return nR.filter(n=>n.diff<0).slice(0,5).map(n=>{
 const top=fas.filter(p=>p.pos===n.pos).sort((a,b)=>b.ovr-a.ovr).slice(0,5);
 return{pos:n.pos,grade:n.g,gradeColor:n.c,diff:n.diff,avgOvr:n.avgOvr,la:n.la,players:top};
@@ -392,7 +393,7 @@ return{pos:n.pos,grade:n.g,gradeColor:n.c,diff:n.diff,avgOvr:n.avgOvr,la:n.la,pl
 const tEng=useMemo(()=>{if(!data)return null;const d={...data,userTid:data.userTid??myTid};return tradeCalc(d);},[data,myTid]);
 const projMap=useMemo(()=>{if(!data)return{};const m={};data.players.forEach(p=>{try{const pr=projectRatings(p.rt,p.age,3,progMode);m[p.pid]=pr[2]?.ovr||p.ovr;}catch(e){m[p.pid]=p.ovr;}});return m;},[data,progMode]);
 const teamMap=useMemo(()=>data?new Map(data.teams.map(t=>[t.tid,t])):new Map(),[data]);
-const pwrRank=useMemo(()=>{if(!data)return null;const posRankOrder=["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];const td=data.teams.filter(t=>t.tid>=0).map(t=>{const tp=data.players.filter(p=>p.tid===t.tid);const teamOvrRaw=calcTeamVal(tp.map(p=>({pos:p.pos,val:p.ovr})));const teamOvr=Math.round((teamOvrRaw*100)/20+42);const posOvrs={};posRankOrder.forEach(pos=>{const pp=tp.filter(p=>p.pos===pos);const starters=(TPW[pos]||[1]).length;const top=pp.sort((a,b)=>b.ovr-a.ovr).slice(0,starters);posOvrs[pos]=top.length?Math.round(top.reduce((s,p)=>s+p.ovr,0)/top.length):0;});const avgAge=tp.length?Math.round(tp.reduce((s,p)=>s+p.age,0)/tp.length*10)/10:0;const numGames=data.numGames||17;const gp=t.won+t.lost;const prevS=t.seasons&&t.seasons.length>=2?t.seasons[t.seasons.length-2]:null;const dispWon=gp>0?t.won:(prevS?prevS.won:0);const dispLost=gp>0?t.lost:(prevS?prevS.lost:0);const winPct=gp>0?t.won/gp:(prevS&&(prevS.won+prevS.lost)>0?prevS.won/(prevS.won+prevS.lost):0.5);const estimatedMOV=teamOvrRaw;const recentBonus=-10+20*winPct;const score=estimatedMOV+recentBonus;return{...t,teamOvr,posOvrs,avgAge,score,playerCount:tp.length,dispWon,dispLost,top:tp.sort((a,b)=>b.ovr-a.ovr).slice(0,3)};});const posRanks={};posRankOrder.forEach(pos=>{const sorted=[...td].sort((a,b)=>(b.posOvrs[pos]||0)-(a.posOvrs[pos]||0));sorted.forEach((t,i)=>{if(!posRanks[t.tid])posRanks[t.tid]={};posRanks[t.tid][pos]=i+1;});});td.forEach(t=>t.posRanks=posRanks[t.tid]||{});td.sort((a,b)=>b.teamOvr-a.teamOvr);td.forEach((t,i)=>t.rank=i+1);const maxOvr=Math.max(...td.map(t=>t.teamOvr));const minOvr=Math.min(...td.map(t=>t.teamOvr));return{td,maxOvr,minOvr,posRankOrder};},[data]);
+const pwrRank=useMemo(()=>{if(!data||!vP.length)return null;const posRankOrder=["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];const td=data.teams.filter(t=>t.tid>=0).map(t=>{const tp=vP.filter(p=>p.tid===t.tid);const teamOvrRaw=calcTeamVal(tp.map(p=>({pos:p.pos,val:p.ovr})));const teamOvr=Math.round((teamOvrRaw*100)/20+42);const posOvrs={};posRankOrder.forEach(pos=>{const pp=tp.filter(p=>p.pos===pos);const starters=(TPW[pos]||[1]).length;const top=pp.sort((a,b)=>b.ovr-a.ovr).slice(0,starters);posOvrs[pos]=top.length?Math.round(top.reduce((s,p)=>s+p.ovr,0)/top.length):0;});const avgAge=tp.length?Math.round(tp.reduce((s,p)=>s+p.age,0)/tp.length*10)/10:0;const numGames=data.numGames||17;const gp=t.won+t.lost;const prevS=t.seasons&&t.seasons.length>=2?t.seasons[t.seasons.length-2]:null;const dispWon=gp>0?t.won:(prevS?prevS.won:0);const dispLost=gp>0?t.lost:(prevS?prevS.lost:0);const winPct=gp>0?t.won/gp:(prevS&&(prevS.won+prevS.lost)>0?prevS.won/(prevS.won+prevS.lost):0.5);const estimatedMOV=teamOvrRaw;const recentBonus=-10+20*winPct;const score=estimatedMOV+recentBonus;return{...t,teamOvr,posOvrs,avgAge,score,playerCount:tp.length,dispWon,dispLost,top:tp.sort((a,b)=>b.ovr-a.ovr).slice(0,3)};});const posRanks={};posRankOrder.forEach(pos=>{const sorted=[...td].sort((a,b)=>(b.posOvrs[pos]||0)-(a.posOvrs[pos]||0));sorted.forEach((t,i)=>{if(!posRanks[t.tid])posRanks[t.tid]={};posRanks[t.tid][pos]=i+1;});});td.forEach(t=>t.posRanks=posRanks[t.tid]||{});td.sort((a,b)=>b.teamOvr-a.teamOvr);td.forEach((t,i)=>t.rank=i+1);const maxOvr=Math.max(...td.map(t=>t.teamOvr));const minOvr=Math.min(...td.map(t=>t.teamOvr));return{td,maxOvr,minOvr,posRankOrder};},[data,vP]);
 const p3=pid=>projMap[pid]||0;
 const tradeEval=useMemo(()=>{
 if(!tEng||!data||tradeTid===null)return null;
@@ -452,7 +453,7 @@ allResults.push({team,players:[...players],picks:[...picks],dvThem:dv,dvMe,
 returnOvr:players.length?Math.max(...players.map(p=>p.ovr)):0,
 returnPos:fp?fp.pos:"",returnPot:fp?fp.pot:0,return3y:fp?p3(fp.pid):0,
 returnAge:fp?fp.age:0,returnSal:fp?fp.salary:0,returnYrs:fp?fp.yrsLeft:0,
-returnVal:fp?tEng.zs((fp.value||fp.valueFuzz||0)):0,isDeep:true});};
+returnVal:fp?tEng.zs((fp.valueFuzz||fp.value||0)):0,isDeep:true});};
 // Run forward selection with given asset pool
 const runPass=(assetPool)=>{
 let addedPids=[];let addedDpids=[];let prevDv=Infinity;
@@ -551,7 +552,7 @@ const fp=players[0];
 offers.push({team:t,players,picks,dvThem,dvMe,returnOvr:retOvr,
 returnPos:fp?fp.pos:"",returnPot:fp?fp.pot:0,return3y:fp?p3(fp.pid):0,returnAge:fp?fp.age:0,
 returnSal:fp?fp.salary:0,returnYrs:fp?fp.yrsLeft:0,
-returnVal:fp?tEng.zs(fp.value||fp.valueFuzz||0):0});};
+returnVal:fp?tEng.zs(fp.valueFuzz||fp.value||0):0});};
 // 1 player
 for(const tp of teamP)tryOffer([tp],[]);
 // 1 pick
@@ -599,7 +600,7 @@ return filtered.sort((a,b)=>b.dvMe-a.dvMe).slice(0,100);
 const huntOffers=useMemo(()=>{
 if(!tEng||!data||(!huntPid&&!huntDpid))return[];
 // Target can be a player or a pick
-const targetPlayer=huntPid?data.players.find(p=>p.pid===huntPid):null;
+const targetPlayer=huntPid?vP.find(p=>p.pid===huntPid):null;
 const targetPick=huntDpid?(data.draftPicks||[]).find(d=>d.dpid===huntDpid):null;
 if(!targetPlayer&&!targetPick)return[];
 const targetTid=targetPlayer?.tid??targetPick?.tid;
@@ -949,7 +950,7 @@ Formulas extracted from <span style={{color:$.t4}}>zengm-games/zengm</span> · O
 if(!tSel){
 const{td,maxOvr,minOvr,posRankOrder}=pwrRank||{td:[],maxOvr:0,minOvr:0,posRankOrder:[]};
 return(<div style={{padding:"24px 16px",maxWidth:800,margin:"0 auto"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h1 style={{...H,fontSize:22,letterSpacing:2,background:"linear-gradient(135deg,#e63946,#f4a261,#2a9d8f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><ThemeBtn/></div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><h1 style={{...H,fontSize:22,letterSpacing:2,background:"linear-gradient(135deg,#e63946,#f4a261,#2a9d8f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><div style={{display:"flex",gap:5,alignItems:"center"}}><div className="tip" style={{position:"relative"}}><button onClick={()=>setGodMode(g=>!g)} style={{background:godMode?"rgba(230,57,70,0.15)":$.btn,border:`1px solid ${godMode?"#e63946":$.btnb}`,borderRadius:6,color:godMode?"#e63946":$.t,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>{godMode?"👁 God":"Normal"}</button><span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:220,top:"calc(100% + 6px)",bottom:"auto",right:0,left:"auto",transform:"none"}}>God Mode shows true OVR/POT ratings. Normal shows fuzzed values (what you see in-game without God Mode). Trade AI always uses fuzzed values regardless of this toggle.</span></div><ThemeBtn/></div></div>
 <p style={{textAlign:"center",fontSize:12,color:$.t5,margin:"0 0 4px",...M}}>Season {data.season} · {data.players.length} players</p>
 <p style={{textAlign:"center",fontSize:15,color:$.t8,margin:"0 0 14px",fontWeight:600}}>Power Rankings</p>
 {/* Header */}
@@ -987,6 +988,10 @@ return(<div style={{padding:"16px 12px",maxWidth:740,margin:"0 auto"}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
 <div><h1 style={{...H,fontSize:18,margin:0,letterSpacing:1,background:"linear-gradient(135deg,#e63946,#f4a261)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",textTransform:"uppercase"}}>FBGM Advisor</h1><span style={{fontSize:11,color:$.t4,...M}}>Season {data.season} · {myTm?.name||`Team #${myTid}`}</span></div>
 <div style={{display:"flex",gap:5,alignItems:"center"}}><ThemeBtn/>
+<div className="tip" style={{position:"relative"}}>
+<button onClick={()=>setGodMode(g=>!g)} style={{background:godMode?"rgba(230,57,70,0.15)":$.btn,border:`1px solid ${godMode?"#e63946":$.btnb}`,borderRadius:6,color:godMode?"#e63946":$.t,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>{godMode?"👁 God":"Normal"}</button>
+<span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:220,top:"calc(100% + 6px)",bottom:"auto",right:0,left:"auto",transform:"none"}}>God Mode shows true OVR/POT ratings. Normal shows fuzzed values (what you see in-game without God Mode). Trade AI always uses fuzzed values regardless of this toggle.</span>
+</div>
 <div className="tip" style={{position:"relative"}}>
 <button onClick={()=>setProgMode(m=>m==="default"?"prog35":"default")} style={{background:progMode==="prog35"?"rgba(46,204,113,0.15)":$.btn,border:`1px solid ${progMode==="prog35"?"#2ecc71":$.btnb}`,borderRadius:6,color:progMode==="prog35"?"#2ecc71":$.t,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>{progMode==="prog35"?"Prog 3.5":"Default"}</button>
 <span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:220,top:"calc(100% + 6px)",bottom:"auto",right:0,left:"auto",transform:"none"}}>Progression mode. Default = ZenGM source code aging curves. Prog 3.5 = community progression code from <a href="https://discord.com/channels/290013534023057409/1455882262313828443/" target="_blank" style={{color:"#e63946"}}>BBGM Discord</a>. Affects all projections.</span>
@@ -1068,7 +1073,7 @@ return<>
 {draftTracker.history.filter(h=>h.year===yr).map(h=><div key={h.pid||h.name+h.round} style={{display:"grid",gridTemplateColumns:"50px minmax(90px,1fr) 32px 64px 62px 32px 28px",alignItems:"center",gap:4,padding:"3px 4px",fontSize:11,
 background:!h.onTeam?"rgba(231,76,60,0.05)":"transparent",borderRadius:4}}>
 <span style={{...M,fontSize:10,color:$.t4}}>R{h.round}P{h.pick}</span>
-<span onClick={()=>{const fp=data.players.find(p=>p.pid===h.pid);if(fp)setSelP(fp);}} style={{color:h.onTeam?$.t:$.t5,fontWeight:h.onTeam?600:400,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}{!h.onTeam&&<span style={{fontSize:8,color:"#e74c3c",marginLeft:3}}>gone</span>}</span>
+<span onClick={()=>{const fp=vP.find(p=>p.pid===h.pid);if(fp)setSelP(fp);}} style={{color:h.onTeam?$.t:$.t5,fontWeight:h.onTeam?600:400,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.name}{!h.onTeam&&<span style={{fontSize:8,color:"#e74c3c",marginLeft:3}}>gone</span>}</span>
 <span style={{...M,fontSize:9,color:PC[h.pos]}}>{h.pos}</span>
 <span style={{...M,fontSize:10,color:$.t4}}>D:{h.dOvr}/{h.dPot}</span>
 <span style={{...M,fontSize:10}}>→ <span style={{color:$.t0,fontWeight:700}}>{h.curOvr}</span><span style={{color:h.curPot>h.curOvr?"#2ecc71":$.t3}}>/{h.curPot}</span></span>
@@ -1164,7 +1169,7 @@ return <div key={yr} style={{display:"flex",flexDirection:"column",alignItems:"c
 background:r.isMyPick?"rgba(230,57,70,0.12)":r.pick%2===0?$.row:"transparent",borderLeft:r.isMyPick?"2px solid #e63946":"2px solid transparent"}}>
 <span style={{...M,fontSize:11,fontWeight:700,color:r.isMyPick?"#e63946":$.t4}}>#{r.pick}</span>
 <span style={{fontSize:11,color:$.t5}}>{r.abbrev}{r.fromAbbrev&&<span style={{fontSize:8,color:$.t3}}> via {r.fromAbbrev}</span>}</span>
-<span onClick={()=>{const fp=data.players.find(p=>p.pid===r.player.pid);if(fp)setSelP(fp);}} style={{fontWeight:r.isMyPick?700:600,color:r.isMyPick?"#e63946":$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.player.name}</span>
+<span onClick={()=>{const fp=vP.find(p=>p.pid===r.player.pid);if(fp)setSelP(fp);}} style={{fontWeight:r.isMyPick?700:600,color:r.isMyPick?"#e63946":$.t,cursor:"pointer",textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.player.name}</span>
 <span style={{textAlign:"center"}}>{r.fillsNeed?<span style={{...M,fontSize:8,padding:"1px 4px",borderRadius:3,background:"rgba(46,204,113,0.15)",color:"#2ecc71",border:"1px solid rgba(46,204,113,0.3)"}}>NEED</span>:null}</span>
 <span style={{...M,fontSize:10,fontWeight:700,color:PC[r.player.pos]}}>{r.player.pos}</span>
 <span style={{...M,fontSize:11,fontWeight:700,color:$.t0,textAlign:"center"}}>{r.player.ovr}</span>
@@ -1273,7 +1278,7 @@ const backups=posPlayers.slice(starterCounts[pos]);
 const starterAvg=starters.length?Math.round(starters.reduce((s,p)=>s+p.ovr,0)/starters.length):0;
 // Liga avg for starters
 const lgStarters=data.teams.filter(t=>t.tid>=0&&t.tid!==myTid).map(t=>{
-const tp=data.players.filter(p=>p.tid===t.tid&&p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,starterCounts[pos]);
+const tp=vP.filter(p=>p.tid===t.tid&&p.pos===pos).sort((a,b)=>b.ovr-a.ovr).slice(0,starterCounts[pos]);
 return tp.length?tp.reduce((s,p)=>s+p.ovr,0)/tp.length:0;
 });
 const lgAvg=lgStarters.length?Math.round(lgStarters.reduce((s,v)=>s+v,0)/lgStarters.length):0;
@@ -1601,7 +1606,7 @@ return <>
 </div>
 {tradeTid!==null&&(()=>{
 const otherTeam=teamMap.get(tradeTid);
-const otherP=data.players.filter(p=>p.tid===tradeTid).sort((a,b)=>b.ovr-a.ovr);
+const otherP=vP.filter(p=>p.tid===tradeTid).sort((a,b)=>b.ovr-a.ovr);
 const myDPs=(data.draftPicks||[]).filter(d=>d.tid===myTid).sort((a,b)=>a.season-b.season||a.round-b.round);
 const theirDPs=(data.draftPicks||[]).filter(d=>d.tid===tradeTid).sort((a,b)=>a.season-b.season||a.round-b.round);
 const togglePid=(pid,list,setter)=>setter(l=>l.includes(pid)?l.filter(x=>x!==pid):[...l,pid]);
@@ -1615,7 +1620,7 @@ return <>
 <div style={{display:"grid",gridTemplateColumns:grid,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
 <span></span><TH side="my" label="Name" sk="name"/><TH side="my" label="Pos" sk="pos" align="center"/><TH side="my" label="OVR" sk="ovr" align="center"/><TH side="my" label="Pot" sk="pot" align="center"/><TH side="my" label="→3y" sk="ovr3" align="center"/><TH side="my" label="Age" sk="age" align="center"/><TH side="my" label="Salary" sk="salary" align="right"/><span className="tip" style={{position:"relative",cursor:"help"}}><TH side="my" label="Val" sk="tradeVal" align="right"/><span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:200,top:"calc(100% + 6px)",right:0,left:"auto",transform:"none"}}>Z-Score value. In the trade formula, values over 1.0 are cubed (EXPONENT=3): Val 2.0 becomes 8.0, Val 3.0 becomes 27.0. This is why stars are exponentially harder to trade for.</span></span></div>
 <div style={{maxHeight:280,overflowY:"auto"}}>
-{sortP(myP.map(p=>({...p,tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"my").map(p=><div key={p.pid} onClick={()=>togglePid(p.pid,tradeMyPids,setTradeMyPids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
+{sortP(myP.map(p=>({...p,tradeVal:tEng?tEng.zs(p.valueFuzz||p.value||0):0})),"my").map(p=><div key={p.pid} onClick={()=>togglePid(p.pid,tradeMyPids,setTradeMyPids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:tradeMyPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",border:tradeMyPids.includes(p.pid)?"1px solid rgba(230,57,70,0.3)":"1px solid transparent"}}>
 <span style={{fontSize:10,color:tradeMyPids.includes(p.pid)?"#e63946":$.t3}}>{tradeMyPids.includes(p.pid)?"✓":"○"}</span>
 <span style={{fontWeight:600,color:tradeMyPids.includes(p.pid)?"#e63946":$.t,whiteSpace:"nowrap"}}>{p.name}</span>
@@ -1625,7 +1630,7 @@ background:tradeMyPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",bord
 <span style={{...M,fontSize:10,color:p3(p.pid)>p.ovr?"#2ecc71":p3(p.pid)<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{p3(p.pid)}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
-<span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>
+<span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{tEng?tEng.zs(p.valueFuzz||p.value||0).toFixed(1):""}</span>
 </div>)}
 {myDPs.map(dp=>{const from=dp.originalTid!==dp.tid?teamMap.get(dp.originalTid):null;
 return <div key={"dp"+dp.dpid} onClick={()=>toggleDpid(dp.dpid,tradeMyDpids,setTradeMyDpids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
@@ -1643,7 +1648,7 @@ background:tradeMyDpids.includes(dp.dpid)?"rgba(230,57,70,0.12)":"rgba(241,196,1
 <div style={{display:"grid",gridTemplateColumns:grid,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
 <span></span><TH side="their" label="Name" sk="name"/><TH side="their" label="Pos" sk="pos" align="center"/><TH side="their" label="OVR" sk="ovr" align="center"/><TH side="their" label="Pot" sk="pot" align="center"/><TH side="their" label="→3y" sk="ovr3" align="center"/><TH side="their" label="Age" sk="age" align="center"/><TH side="their" label="Salary" sk="salary" align="right"/><TH side="their" label="Val" sk="tradeVal" align="right"/></div>
 <div style={{maxHeight:280,overflowY:"auto"}}>
-{sortP(otherP.map(p=>({...p,tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"their").map(p=><div key={p.pid} onClick={()=>togglePid(p.pid,tradeTheirPids,setTradeTheirPids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
+{sortP(otherP.map(p=>({...p,tradeVal:tEng?tEng.zs(p.valueFuzz||p.value||0):0})),"their").map(p=><div key={p.pid} onClick={()=>togglePid(p.pid,tradeTheirPids,setTradeTheirPids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:tradeTheirPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",border:tradeTheirPids.includes(p.pid)?"1px solid rgba(230,57,70,0.3)":"1px solid transparent"}}>
 <span style={{fontSize:10,color:tradeTheirPids.includes(p.pid)?"#e63946":$.t3}}>{tradeTheirPids.includes(p.pid)?"✓":"○"}</span>
 <span style={{fontWeight:600,color:tradeTheirPids.includes(p.pid)?"#e63946":$.t,whiteSpace:"nowrap"}}>{p.name}</span>
@@ -1653,7 +1658,7 @@ background:tradeTheirPids.includes(p.pid)?"rgba(230,57,70,0.12)":"transparent",b
 <span style={{...M,fontSize:10,color:p3(p.pid)>p.ovr?"#2ecc71":p3(p.pid)<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{p3(p.pid)}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
-<span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>
+<span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{tEng?tEng.zs(p.valueFuzz||p.value||0).toFixed(1):""}</span>
 </div>)}
 {theirDPs.map(dp=>{const from=dp.originalTid!==dp.tid?teamMap.get(dp.originalTid):null;
 return <div key={"dp"+dp.dpid} onClick={()=>toggleDpid(dp.dpid,tradeTheirDpids,setTradeTheirDpids)} style={{display:"grid",gridTemplateColumns:grid,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
@@ -1718,7 +1723,7 @@ return <>
 <div style={{maxHeight:280,overflowY:"auto"}}>
 <div style={{display:"grid",gridTemplateColumns:grid2,gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4,borderLeft:"3px solid transparent",position:"sticky",top:0,zIndex:1,background:$.card}}>
 <span></span><MSH sec="shop" label="Name" sk="name"/><MSH sec="shop" label="Pos" sk="pos" align="center"/><MSH sec="shop" label="OVR" sk="ovr" align="center"/><MSH sec="shop" label="Pot" sk="pot" align="center"/><MSH sec="shop" label="→3y" sk="ovr3" align="center"/><MSH sec="shop" label="Age" sk="age" align="center"/><MSH sec="shop" label="Salary" sk="salary" align="right"/><MSH sec="shop" label="Yrs" sk="yrsLeft" align="center"/><MSH sec="shop" label="Val" sk="tradeVal" align="right"/></div>
-{mSrt(myP.map(p=>({...p,ovr3:p3(p.pid),tradeVal:tEng?tEng.zs(p.value||p.valueFuzz||0):0})),"shop").map(p=><div key={p.pid} onClick={()=>toggleShopPid(p.pid)} style={{display:"grid",gridTemplateColumns:grid2,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
+{mSrt(myP.map(p=>({...p,ovr3:p3(p.pid),tradeVal:tEng?tEng.zs(p.valueFuzz||p.value||0):0})),"shop").map(p=><div key={p.pid} onClick={()=>toggleShopPid(p.pid)} style={{display:"grid",gridTemplateColumns:grid2,alignItems:"center",gap:3,padding:"3px 4px",fontSize:11,cursor:"pointer",borderRadius:4,
 background:shopPids.includes(p.pid)?"rgba(230,57,70,0.15)":"transparent",borderLeft:shopPids.includes(p.pid)?"3px solid #e63946":"3px solid transparent"}}>
 <span style={{fontSize:10,color:shopPids.includes(p.pid)?"#e63946":$.t3}}>{shopPids.includes(p.pid)?"✓":"○"}</span>
 <span style={{fontWeight:shopPids.includes(p.pid)?700:500,color:shopPids.includes(p.pid)?"#e63946":$.t,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
@@ -1792,7 +1797,7 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
-{pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>}
+{pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{tEng?tEng.zs(p.valueFuzz||p.value||0).toFixed(1):""}</span>}
 {pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:capOver?"#e74c3c":o.dvThem>1?"#2ecc71":o.dvThem>0.3?"#2ecc71":o.dvThem>0?"#f1c40f":"#e67e22",background:capOver?"rgba(231,76,60,0.12)":o.dvThem>0.3?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{capOver?"Cap!":o.dvThem>1?"Sure ✅":o.dvThem>0.3?"Likely":o.dvThem>0?"Maybe ⚠":"Risky"}{o.isDeep?" ⚡":""}</span>}
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{o.dvThem.toFixed(1)}</span>}
 {pi>0&&<span/>}{pi>0&&<span/>}{pi>0&&<span/>}
@@ -1814,9 +1819,9 @@ return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent
 
 {tradeMode==="hunter"&&<>
 {(()=>{
-const allPlayers=data.players.filter(p=>p.tid>=0&&p.tid!==myTid);
+const allPlayers=vP.filter(p=>p.tid>=0&&p.tid!==myTid);
 const filtered=huntSearch.length>=2?allPlayers.filter(p=>p.name.toLowerCase().includes(huntSearch.toLowerCase())):[];
-const target=huntPid?data.players.find(p=>p.pid===huntPid):null;
+const target=huntPid?vP.find(p=>p.pid===huntPid):null;
 const targetPick=huntDpid?(data.draftPicks||[]).find(d=>d.dpid===huntDpid):null;
 const targetTid2=target?target.tid:(targetPick?targetPick.tid:null);
 const targetTeam=targetTid2!==null?teamMap.get(targetTid2):null;
@@ -1871,7 +1876,7 @@ return <div key={dp.dpid} onClick={()=>{setHuntDpid(dp.dpid);setHuntPid(null);se
 <span style={{...M,color:target.potGap>=10?"#2ecc71":$.t3}}>{target.pot}</span>
 <span style={{fontSize:10,color:$.t5}}>{target.age}y</span>
 <span style={{fontSize:10,color:$.t4}}>{fS(target.salary)}</span>
-<span style={{...M,fontSize:10,color:$.t4}}>Val: {tEng?tEng.zs(target.value||0).toFixed(1):""}</span>
+<span style={{...M,fontSize:10,color:$.t4}}>Val: {tEng?tEng.zs(target.valueFuzz||target.value||0).toFixed(1):""}</span>
 </>}
 {!target&&targetPick&&<>
 <div style={{fontSize:14,fontWeight:700,color:"#f1c40f"}}>{targetPick.season} Round {targetPick.round}{targetPick.pick>0?" Pick "+targetPick.pick:""}</div>
@@ -1894,7 +1899,7 @@ return <div key={dp.dpid} onClick={()=>{setHuntDpid(dp.dpid);setHuntPid(null);se
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
-{pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{tEng?tEng.zs(p.value||p.valueFuzz||0).toFixed(1):""}</span>}
+{pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{tEng?tEng.zs(p.valueFuzz||p.value||0).toFixed(1):""}</span>}
 {pi===0&&<span style={{...M,fontSize:9,padding:"1px 4px",borderRadius:3,textAlign:"center",color:o.dvThem>1?"#2ecc71":o.dvThem>0.3?"#2ecc71":o.dvThem>0?"#f1c40f":"#e67e22",background:o.dvThem>0.3?"rgba(46,204,113,0.12)":"rgba(241,196,15,0.12)"}}>{o.dvThem>1?"Sure ✅":o.dvThem>0.3?"Likely":o.dvThem>0?"Maybe ⚠":"Risky"}</span>}
 {pi===0&&<span style={{...M,fontSize:9,color:$.t4,textAlign:"center"}}>{o.dvThem.toFixed(1)}</span>}
 {pi>0&&<span/>}{pi>0&&<span/>}{pi>0&&<span/>}
@@ -1933,7 +1938,7 @@ return <div key={dp.dpid} onClick={()=>{setHuntDpid(dp.dpid);setHuntPid(null);se
 {data.teams.filter(t=>t.tid!==myTid&&t.tid>=0).map(t=><button key={t.tid} onClick={()=>setCompTid(t.tid)} style={{padding:"4px 8px",fontSize:10,border:`1px solid ${compTid===t.tid?"#e63946":$.cb}`,borderRadius:5,cursor:"pointer",background:compTid===t.tid?"rgba(230,57,70,0.15)":$.btn,color:compTid===t.tid?"#e63946":$.t5,fontFamily:"'DM Sans',sans-serif",...M}}>{t.abbrev}</button>)}
 </div>
 </div>
-{compTid!==null&&(()=>{const opp=teamMap.get(compTid);const oppP=data.players.filter(p=>p.tid===compTid);
+{compTid!==null&&(()=>{const opp=teamMap.get(compTid);const oppP=vP.filter(p=>p.tid===compTid);
 const posOrder=[...nR].sort((a,b)=>b.tw-a.tw).map(n=>n.pos);
 let myWins=0,oppWins=0;let myTotal=0,oppTotal=0,twTotal=0;
 const rows=posOrder.map(pos=>{
@@ -1980,7 +1985,7 @@ return <div style={cs}>
 {(()=>{
 const keyRatings={QB:["thv","thp","tha","spd","hgt"],RB:["spd","elu","bsc","hnd"],WR:["spd","hnd","rtr","hgt"],TE:["hnd","rbk","rtr","spd"],OL:["rbk","pbk","hgt","spd"],DL:["prs","rns","spd","hgt"],LB:["tck","pcv","spd","prs"],CB:["pcv","spd","hgt"],S:["pcv","tck","spd"],K:["kpw","kac"],P:["ppw","pac"]};
 const RN={hgt:"Height",spd:"Speed",endu:"Endurance",thv:"Throw Vis",thp:"Throw Pow",tha:"Throw Acc",bsc:"Ball Sec",elu:"Elusiveness",rtr:"Route Run",hnd:"Hands",rbk:"Run Block",pbk:"Pass Block",pcv:"Coverage",tck:"Tackling",prs:"Pass Rush",rns:"Run Stop",kpw:"Kick Pow",kac:"Kick Acc",ppw:"Punt Pow",pac:"Punt Acc",ovrDef:"Ovr Def"};
-const allP=data?data.players:[];
+const allP=data?vP:[];
 const filt=(s)=>s.length<2?[]:allP.filter(p=>p.name.toLowerCase().includes(s.toLowerCase())).sort((a,b)=>b.ovr-a.ovr).slice(0,12);
 const list1=filt(compS1);const list2=filt(compS2);
 return <>
