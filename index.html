@@ -416,7 +416,7 @@ const theirSalIn=tradeMyPids.reduce((s,pid)=>{const p=tEng.playerMap.get(pid);re
 const myTotalSal=data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0);
 const theirTotalSal=data.players.filter(p=>p.tid===tradeTid).reduce((s,p)=>s+p.salary,0);
 const myCapAfter=myTotalSal-mySalOut+mySalIn;const theirCapAfter=theirTotalSal-theirSalOut+theirSalIn;
-const myCapBefore=myPlayers.reduce((s,p)=>s+p.salary,0);const theirCapBefore=data.players.filter(p=>p.tid===t.tid).reduce((s,p)=>s+p.salary,0);const capBlocked=tEng.capAmt>0&&((myCapAfter>tEng.capAmt&&myCapAfter>myCapBefore)||(theirCapAfter>tEng.capAmt&&theirCapAfter>theirCapBefore));
+const myCapBefore=myTotalSal;const theirCapBefore=theirTotalSal;const capBlocked=tEng.capAmt>0&&((myCapAfter>tEng.capAmt&&myCapAfter>myCapBefore)||(theirCapAfter>tEng.capAmt&&theirCapAfter>theirCapBefore));
 const accepted=dv>0&&!capBlocked;
 const msg=capBlocked?"Salary cap exceeded!":dv>0?"Accepted!":dv>-2?"Close, but not quite enough.":dv>-5?"Not a good deal for them.":"What, are you crazy?!";
 const color=accepted?"#2ecc71":capBlocked?"#e74c3c":dv>-2?"#f1c40f":dv>-5?"#e67e22":"#e74c3c";
