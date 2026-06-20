@@ -533,7 +533,7 @@ const shopAs=shopPlayers.map(p=>tEng.makePlayerAsset(p,false)).concat(shopPickOb
 const shopLoss=shopPlayers.map(p=>tEng.makePlayerAsset(p,true)).concat(shopPickObjs.map(dp=>tEng.makePickAsset(dp,myTid,t.tid,[],[])));
 const shopVal=tEng.sumAssets(shopAs,strategy,true);
 const myLossVal=tEng.sumAssets(shopLoss,myStrategy,false);
-const teamPByVal=(playersByTeam.get(t.tid)||[]).sort((a,b)=>(b.value||0)-(a.value||0));
+const teamPByVal=(playersByTeam.get(t.tid)||[]).sort((a,b)=>(b.valueFuzz||b.value||0)-(a.valueFuzz||a.value||0));
 const shopSalary=shopPlayers.reduce((s,p)=>s+p.salary,0);
 const teamPBySalMatch=[...(playersByTeam.get(t.tid)||[])].sort((a,b)=>Math.abs(a.salary-shopSalary)-Math.abs(b.salary-shopSalary));
 const seen=new Set();const teamP=[];
@@ -612,9 +612,9 @@ const targetA=targetPlayer?tEng.makePlayerAsset(targetPlayer,true):tEng.makePick
 const targetGet=targetPlayer?tEng.makePlayerAsset(targetPlayer,false):tEng.makePickAsset(targetPick,targetTid,myTid,[],[]);
 const targetLoss=tEng.sumAssets([targetA],theirStrategy,false);
 const targetGain=tEng.sumAssets([targetGet],myStrategy,true);
-const myPlayers=data.players.filter(p=>p.tid===myTid).sort((a,b)=>(b.value||0)-(a.value||0));
+const myPlayers=data.players.filter(p=>p.tid===myTid).sort((a,b)=>(b.valueFuzz||b.value||0)-(a.valueFuzz||a.value||0));
 const myPicks=(data.draftPicks||[]).filter(d=>d.tid===myTid).sort((a,b)=>a.round-b.round||a.season-b.season);
-const offers=[];const MAX=6;const MAXP=8;
+const offers=[];const MAX=12;const MAXP=8;
 const tryOffer=(players,picks)=>{
 const myAs=players.map(p=>tEng.makePlayerAsset(p,true)).concat(picks.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,players.map(p=>p.pid),targetPlayer?[targetPlayer.pid]:[])));
 const dvThem=tEng.sumAssets(myAs,theirStrategy,true)-targetLoss;
@@ -633,19 +633,19 @@ for(let i=0;i<Math.min(myPlayers.length,MAX);i++){for(let j=i+1;j<Math.min(myPla
 // 2 picks
 for(let i=0;i<Math.min(myPicks.length,MAXP);i++){for(let j=i+1;j<Math.min(myPicks.length,MAXP);j++)tryOffer([],[myPicks[i],myPicks[j]]);}
 // 2 players + 1 pick
-for(let i=0;i<Math.min(myPlayers.length,5);i++){for(let j=i+1;j<Math.min(myPlayers.length,5);j++){for(const dp of myPicks.slice(0,3))tryOffer([myPlayers[i],myPlayers[j]],[dp]);}}
+for(let i=0;i<Math.min(myPlayers.length,8);i++){for(let j=i+1;j<Math.min(myPlayers.length,8);j++){for(const dp of myPicks.slice(0,5))tryOffer([myPlayers[i],myPlayers[j]],[dp]);}}
 // 1 player + 2 picks
-for(const p of myPlayers.slice(0,5)){for(let i=0;i<Math.min(myPicks.length,MAXP);i++){for(let j=i+1;j<Math.min(myPicks.length,MAXP);j++)tryOffer([p],[myPicks[i],myPicks[j]]);}}
+for(const p of myPlayers.slice(0,8)){for(let i=0;i<Math.min(myPicks.length,MAXP);i++){for(let j=i+1;j<Math.min(myPicks.length,MAXP);j++)tryOffer([p],[myPicks[i],myPicks[j]]);}}
 // 3 players
-for(let i=0;i<Math.min(myPlayers.length,5);i++){for(let j=i+1;j<Math.min(myPlayers.length,5);j++){for(let k=j+1;k<Math.min(myPlayers.length,5);k++)tryOffer([myPlayers[i],myPlayers[j],myPlayers[k]],[]);}}
+for(let i=0;i<Math.min(myPlayers.length,8);i++){for(let j=i+1;j<Math.min(myPlayers.length,8);j++){for(let k=j+1;k<Math.min(myPlayers.length,8);k++)tryOffer([myPlayers[i],myPlayers[j],myPlayers[k]],[]);}}
 // 3 picks
 for(let i=0;i<Math.min(myPicks.length,MAXP);i++){for(let j=i+1;j<Math.min(myPicks.length,MAXP);j++){for(let k=j+1;k<Math.min(myPicks.length,MAXP);k++)tryOffer([],[myPicks[i],myPicks[j],myPicks[k]]);}}
 // 2 players + 2 picks
-for(let i=0;i<Math.min(myPlayers.length,4);i++){for(let j=i+1;j<Math.min(myPlayers.length,4);j++){for(let pi=0;pi<Math.min(myPicks.length,3);pi++){for(let pj=pi+1;pj<Math.min(myPicks.length,3);pj++)tryOffer([myPlayers[i],myPlayers[j]],[myPicks[pi],myPicks[pj]]);}}}
+for(let i=0;i<Math.min(myPlayers.length,6);i++){for(let j=i+1;j<Math.min(myPlayers.length,6);j++){for(let pi=0;pi<Math.min(myPicks.length,5);pi++){for(let pj=pi+1;pj<Math.min(myPicks.length,5);pj++)tryOffer([myPlayers[i],myPlayers[j]],[myPicks[pi],myPicks[pj]]);}}}
 // 3 players + 1 pick
-for(let i=0;i<Math.min(myPlayers.length,4);i++){for(let j=i+1;j<Math.min(myPlayers.length,4);j++){for(let k=j+1;k<Math.min(myPlayers.length,4);k++){for(const dp of myPicks.slice(0,3))tryOffer([myPlayers[i],myPlayers[j],myPlayers[k]],[dp]);}}}
+for(let i=0;i<Math.min(myPlayers.length,6);i++){for(let j=i+1;j<Math.min(myPlayers.length,6);j++){for(let k=j+1;k<Math.min(myPlayers.length,6);k++){for(const dp of myPicks.slice(0,5))tryOffer([myPlayers[i],myPlayers[j],myPlayers[k]],[dp]);}}}
 // 1 player + 3 picks
-for(const p of myPlayers.slice(0,4)){for(let i=0;i<Math.min(myPicks.length,3);i++){for(let j=i+1;j<Math.min(myPicks.length,3);j++){for(let k=j+1;k<Math.min(myPicks.length,3);k++)tryOffer([p],[myPicks[i],myPicks[j],myPicks[k]]);}}}
+for(const p of myPlayers.slice(0,6)){for(let i=0;i<Math.min(myPicks.length,5);i++){for(let j=i+1;j<Math.min(myPicks.length,5);j++){for(let k=j+1;k<Math.min(myPicks.length,5);k++)tryOffer([p],[myPicks[i],myPicks[j],myPicks[k]]);}}}
 return offers.sort((a,b)=>b.dvMe-a.dvMe).slice(0,100);
 },[huntPid,huntDpid,data,tEng,myTid]);
 
