@@ -393,6 +393,7 @@ return{pos:n.pos,grade:n.g,gradeColor:n.c,diff:n.diff,avgOvr:n.avgOvr,la:n.la,pl
 const tEng=useMemo(()=>{if(!data)return null;const d={...data,userTid:data.userTid??myTid};return tradeCalc(d);},[data,myTid]);
 const projMap=useMemo(()=>{if(!data)return{};const m={};data.players.forEach(p=>{try{const pr=projectRatings(p.rt,p.age,3,progMode);m[p.pid]=pr[2]?.ovr||p.ovr;}catch(e){m[p.pid]=p.ovr;}});return m;},[data,progMode]);
 const teamMap=useMemo(()=>data?new Map(data.teams.map(t=>[t.tid,t])):new Map(),[data]);
+const vPMap=useMemo(()=>new Map(vP.map(p=>[p.pid,p])),[vP]);
 const pwrRank=useMemo(()=>{if(!data||!vP.length)return null;const posRankOrder=["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];const td=data.teams.filter(t=>t.tid>=0).map(t=>{const tp=vP.filter(p=>p.tid===t.tid);const teamOvrRaw=calcTeamVal(tp.map(p=>({pos:p.pos,val:p.ovr})));const teamOvr=Math.round((teamOvrRaw*100)/20+42);const posOvrs={};posRankOrder.forEach(pos=>{const pp=tp.filter(p=>p.pos===pos);const starters=(TPW[pos]||[1]).length;const top=pp.sort((a,b)=>b.ovr-a.ovr).slice(0,starters);posOvrs[pos]=top.length?Math.round(top.reduce((s,p)=>s+p.ovr,0)/top.length):0;});const avgAge=tp.length?Math.round(tp.reduce((s,p)=>s+p.age,0)/tp.length*10)/10:0;const numGames=data.numGames||17;const gp=t.won+t.lost;const prevS=t.seasons&&t.seasons.length>=2?t.seasons[t.seasons.length-2]:null;const dispWon=gp>0?t.won:(prevS?prevS.won:0);const dispLost=gp>0?t.lost:(prevS?prevS.lost:0);const winPct=gp>0?t.won/gp:(prevS&&(prevS.won+prevS.lost)>0?prevS.won/(prevS.won+prevS.lost):0.5);const estimatedMOV=teamOvrRaw;const recentBonus=-10+20*winPct;const score=estimatedMOV+recentBonus;return{...t,teamOvr,posOvrs,avgAge,score,playerCount:tp.length,dispWon,dispLost,top:tp.sort((a,b)=>b.ovr-a.ovr).slice(0,3)};});const posRanks={};posRankOrder.forEach(pos=>{const sorted=[...td].sort((a,b)=>(b.posOvrs[pos]||0)-(a.posOvrs[pos]||0));sorted.forEach((t,i)=>{if(!posRanks[t.tid])posRanks[t.tid]={};posRanks[t.tid][pos]=i+1;});});td.forEach(t=>t.posRanks=posRanks[t.tid]||{});td.sort((a,b)=>b.teamOvr-a.teamOvr);td.forEach((t,i)=>t.rank=i+1);const maxOvr=Math.max(...td.map(t=>t.teamOvr));const minOvr=Math.min(...td.map(t=>t.teamOvr));return{td,maxOvr,minOvr,posRankOrder};},[data,vP]);
 const p3=pid=>projMap[pid]||0;
 const tradeEval=useMemo(()=>{
@@ -436,7 +437,7 @@ const shopPlayers=shopPids.map(pid=>tEng.playerMap.get(pid)).filter(Boolean);
 const shopPickObjs=shopDpids.map(dpid=>(data.draftPicks||[]).find(d=>d.dpid===dpid)).filter(Boolean);
 const shopAs=shopPlayers.map(p=>tEng.makePlayerAsset(p,false)).concat(shopPickObjs.map(dp=>tEng.makePickAsset(dp,myTid,targetTid,[],[])));
 const shopVal=tEng.sumAssets(shopAs,theirStrategy,true);
-const aiPlayers=data.players.filter(p=>p.tid===targetTid).filter(p=>!shopPids.includes(p.pid));
+const aiPlayers=data.players.filter(p=>p.tid===targetTid&&p.pos!=="K"&&p.pos!=="P").filter(p=>!shopPids.includes(p.pid));
 const aiPicks=(data.draftPicks||[]).filter(d=>d.tid===targetTid).filter(d=>!shopDpids.includes(d.dpid));
 const allResults=[];
 const saveResult=(addedPids,addedDpids,dv)=>{
@@ -1320,9 +1321,9 @@ return <>
 <span style={{...M,fontSize:9,fontWeight:700,textAlign:"center",color:r.actionColor,padding:"2px 4px",borderRadius:3,background:r.action==="NEED"?"rgba(231,76,60,0.12)":r.action==="SURPLUS"?"rgba(52,152,219,0.12)":r.action==="AGING"?"rgba(241,196,15,0.12)":r.action==="DEPTH"?"rgba(230,126,34,0.12)":"rgba(46,204,113,0.08)"}}>{r.action}</span>
 </div>
 {healthExpand===r.pos&&<div style={{padding:"4px 8px 8px 35px",marginBottom:4}}>
-<div style={{display:"grid",gridTemplateColumns:"14px 1fr 28px 28px 28px 28px 24px 40px 28px",gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
-<span></span><span>Name</span><span style={{textAlign:"center"}}>Pos</span><span style={{textAlign:"center"}}>OVR</span><span style={{textAlign:"center"}}>Pot</span><span style={{textAlign:"center"}}>→3y</span><span style={{textAlign:"center"}}>Age</span><span style={{textAlign:"right"}}>Salary</span><span></span></div>
-{r.players.map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"14px 1fr 28px 28px 28px 28px 24px 40px 28px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11,borderRadius:3,background:i<starterCounts[r.pos]?"rgba(46,204,113,0.05)":"transparent",borderLeft:i<starterCounts[r.pos]?"2px solid #2ecc71":"2px solid transparent"}}>
+<div style={{display:"grid",gridTemplateColumns:"14px 1fr 28px 28px 28px 28px 24px 40px 26px 28px",gap:3,padding:"0 4px",marginBottom:3,fontSize:9,color:$.t4}}>
+<span></span><span>Name</span><span style={{textAlign:"center"}}>Pos</span><span style={{textAlign:"center"}}>OVR</span><span style={{textAlign:"center"}}>Pot</span><span style={{textAlign:"center"}}>→3y</span><span style={{textAlign:"center"}}>Age</span><span style={{textAlign:"right"}}>Salary</span><span style={{textAlign:"center"}}>Yrs</span><span></span></div>
+{r.players.map((p,i)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"14px 1fr 28px 28px 28px 28px 24px 40px 26px 28px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11,borderRadius:3,background:i<starterCounts[r.pos]?"rgba(46,204,113,0.05)":"transparent",borderLeft:i<starterCounts[r.pos]?"2px solid #2ecc71":"2px solid transparent"}}>
 <span style={{fontSize:8,color:i<starterCounts[r.pos]?"#2ecc71":"#e67e22"}}>{i<starterCounts[r.pos]?"ST":"BU"}</span>
 <span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
@@ -1331,6 +1332,7 @@ return <>
 <span style={{...M,fontSize:10,color:p3(p.pid)>p.ovr?"#2ecc71":p3(p.pid)<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{p3(p.pid)}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
+<span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
 <span onClick={(e)=>{e.stopPropagation();goShop(p.pid);}} style={{...M,fontSize:8,padding:"2px 5px",borderRadius:3,cursor:"pointer",background:"rgba(230,57,70,0.1)",border:"1px solid rgba(230,57,70,0.25)",color:"#e63946",textAlign:"center"}}>Trade</span>
 </div>)}
 </div>}
@@ -1787,12 +1789,12 @@ const myCapAfter=myTotalSal-shopSalOut+offerSalIn;
 const theirCapAfter=theirTotalSal-offerSalIn+shopSalOut;
 const myCapBefore=data.players.filter(p=>p.tid===myTid).reduce((s,p)=>s+p.salary,0);const theirCapBefore=data.players.filter(p=>p.tid===o.team.tid).reduce((s,p)=>s+p.salary,0);const capOver=tEng&&tEng.capAmt>0&&((myCapAfter>tEng.capAmt&&myCapAfter>myCapBefore)||(theirCapAfter>tEng.capAmt&&theirCapAfter>theirCapBefore));
 return <div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent",padding:"2px 0",opacity:capOver?0.6:1}}>
-{o.players.map((p,pi)=>{const pp3=p3(p.pid);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
+{o.players.map((p,pi)=>{const vp=vPMap.get(p.pid)||p;const pp3=p3(p.pid);return <div key={p.pid} style={{display:"grid",gridTemplateColumns:"38px minmax(80px,1fr) 28px 30px 28px 30px 24px 42px 26px 32px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
 <span style={{...M,fontWeight:700,fontSize:10,color:$.t,textAlign:"center"}}>{pi===0?team.abbrev:""}</span>
-<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={()=>setSelP(vp)} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
-<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
-<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{vp.ovr}</span>
+<span style={{...M,color:vp.potGap>=10?"#2ecc71":vp.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{vp.pot}</span>
 <span style={{...M,fontSize:10,color:pp3>p.ovr?"#2ecc71":pp3<p.ovr?"#e74c3c":$.t4,textAlign:"center"}}>{pp3}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
@@ -1892,10 +1894,10 @@ return <div key={dp.dpid} onClick={()=>{setHuntDpid(dp.dpid);setHuntPid(null);se
 <div style={{maxHeight:400,overflowY:"auto"}}>
 {sortedHunt.map((o,i)=><div key={i} style={{borderRadius:4,background:i%2===0?$.row:"transparent",padding:"2px 0"}}>
 {o.players.map((p,pi)=><div key={p.pid} style={{display:"grid",gridTemplateColumns:"minmax(80px,1fr) 28px 28px 28px 24px 40px 24px 30px 46px 30px",alignItems:"center",gap:3,padding:"2px 4px",fontSize:11}}>
-<span onClick={()=>setSelP(p)} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,whiteSpace:"nowrap"}}>{p.name}</span>
+<span onClick={()=>{const vp=vPMap.get(p.pid)||p;setSelP(vp);}} style={{color:$.t,cursor:"pointer",fontWeight:600,textDecoration:"underline",textDecorationColor:$.t2,textUnderlineOffset:2,whiteSpace:"nowrap"}}>{p.name}</span>
 <span style={{...M,fontSize:9,color:PC[p.pos],textAlign:"center"}}>{p.pos}</span>
-<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{p.ovr}</span>
-<span style={{...M,color:p.potGap>=10?"#2ecc71":p.potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{p.pot}</span>
+<span style={{...M,fontWeight:700,color:$.t0,textAlign:"center"}}>{(vPMap.get(p.pid)||p).ovr}</span>
+<span style={{...M,color:(vPMap.get(p.pid)||p).potGap>=10?"#2ecc71":(vPMap.get(p.pid)||p).potGap>=5?"#f1c40f":$.t3,textAlign:"center"}}>{(vPMap.get(p.pid)||p).pot}</span>
 <span style={{fontSize:10,color:$.t5,textAlign:"center"}}>{p.age}</span>
 <span style={{...M,fontSize:9,color:$.t4,textAlign:"right"}}>{fS(p.salary)}</span>
 <span style={{...M,fontSize:9,color:p.yrsLeft<=1?"#e67e22":$.t3,textAlign:"center"}}>{p.yrsLeft>0?p.yrsLeft+"y":"exp"}</span>
