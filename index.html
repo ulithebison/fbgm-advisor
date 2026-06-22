@@ -74,25 +74,46 @@ const IQ_RATINGS=new Set(["thv","elu","rtr","hnd","rbk","pbk","pcv","tck","prs",
 const PWR_RATINGS=new Set(["thp","tha","kpw","ppw"]);
 const baseChg=age=>age<=21?2:age<=25?1:age<=27?0:age<=29?-1:age<=31?-2:age<=34?-3:-4;
 const ageMod=(key,age,mode)=>{
-if(key==="hgt"){if(mode==="prog35")return age<=27?0.3:age<=30?-0.7:-1.2;return -(baseChg(age));}
+if(mode==="pc4f"||mode==="pc4r"){
+// ProgCode 4.0: hnd/rtr use power formula (resilient to aging)
+if(key==="hnd"||key==="rtr"){const pm=age<=27?0:age<=29?0.5:age<=31?1.5:2;return pm;}
+// ProgCode 4.0: elu drops hard after 28
+if(key==="elu")return age>=28?-4:0;
+// ProgCode 4.0 Fictional: height changes for WR/TE/CB/S
+if(key==="hgt"&&mode==="pc4f")return age<=27?0.35:age<=30?-0.65:-1.2;
+if(key==="hgt")return -(baseChg(age));
+// ProgCode 4.0: spd — rookies handled separately in projectRatings
 if(key==="spd")return age<=27?0:age<=30?-2:-4;
 if(key==="endu")return age<=23?4:age<=30?0:-4;
-if(mode==="prog35"){
-// ProgCode 3.5: hnd/rtr use power formula (more resilient)
-if(key==="hnd"||key==="rtr"){const pm=age<=27?0:age<=29?0.5:age<=31?1.5:2;return pm;}
-// ProgCode 3.5: elu drops hard after 28
-if(key==="elu")return age>=28?-4:0;
+if(IQ_RATINGS.has(key))return age<=21?3:age<=23?2:age<=27?0:age<=29?0.5:age<=31?1.5:2;
+if(PWR_RATINGS.has(key))return age<=27?0:age<=29?0.5:age<=31?1.5:2;
+return 0;
 }
+// Default ZenGM
+if(key==="hgt")return -(baseChg(age));
+if(key==="spd")return age<=27?0:age<=30?-2:-4;
+if(key==="endu")return age<=23?4:age<=30?0:-4;
 if(IQ_RATINGS.has(key))return age<=21?3:age<=23?2:age<=27?0:age<=29?0.5:age<=31?1.5:2;
 if(PWR_RATINGS.has(key))return age<=27?0:age<=29?0.5:age<=31?1.5:2;
 return 0;
 };
 const projectRatings=(rt,age,seasons,mode)=>{
-const proj=[];let cur={};RK.forEach(k=>cur[k]=rt[k]||0);
+const proj=[];let cur={};RK.forEach(k=>cur[k]=rt[k]||0);const pos=rt.pos;
 for(let s=0;s<seasons;s++){
 const a=age+s;const next={};
-RK.forEach(k=>{const chg=baseChg(a)+ageMod(k,a,mode);next[k]=bd(Math.round(cur[k]+chg),0,100);});
-next.pos=rt.pos;cur=next;
+RK.forEach(k=>{
+let chg=baseChg(a)+ageMod(k,a,mode);
+// ProgCode 4.0: bad player limiters (deterministic avg)
+if(mode==="pc4f"||mode==="pc4r"){
+const prev=cur[k];
+// Rule 1: ratings ≤9 never improve
+if(prev<=9&&chg>0){next[k]=prev;return;}
+// Rule 2: bad players stay bad (cutoff 35, 90% chance → use expected value)
+if(prev<35){const maxChg=Math.floor(prev/10);const clampedChg=Math.min(chg,maxChg);chg=0.9*clampedChg+0.1*chg;}
+}
+next[k]=bd(Math.round(cur[k]+chg),0,100);
+});
+next.pos=pos;cur=next;
 const bp=bP(cur);proj.push({age:a+1,rt:{...cur},ovr:bp.ovr,pos:bp.pos});}
 return proj;};
 const aP=(age,pos)=>{const sp=["RB","CB","WR","S"],iq=["QB","OL","K","P"];if(age<=22)return{l:"Dev",e:"🌱",c:"#2ecc71"};if(age<=25)return{l:"Rise",e:"📈",c:"#3498db"};if(age<=27)return{l:"Prime",e:"⭐",c:"#f1c40f"};if(age<=29)return sp.includes(pos)?{l:"Decl.",e:"⚠️",c:"#e67e22"}:{l:"Late P.",e:"⭐",c:"#f1c40f"};if(age<=31)return iq.includes(pos)?{l:"Vet",e:"🔶",c:"#e67e22"}:{l:"Decl.",e:"🔻",c:"#e74c3c"};return iq.includes(pos)?{l:"Late V.",e:"🔻",c:"#e74c3c"}:{l:"Done",e:"❌",c:"#c0392b"};};
@@ -994,8 +1015,12 @@ return(<div style={{padding:"16px 12px",maxWidth:740,margin:"0 auto"}}>
 <span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:220,top:"calc(100% + 6px)",bottom:"auto",right:0,left:"auto",transform:"none"}}>God Mode shows true OVR/POT ratings. Normal shows fuzzed values (what you see in-game without God Mode). Trade AI always uses fuzzed values regardless of this toggle.</span>
 </div>
 <div className="tip" style={{position:"relative"}}>
-<button onClick={()=>setProgMode(m=>m==="default"?"prog35":"default")} style={{background:progMode==="prog35"?"rgba(46,204,113,0.15)":$.btn,border:`1px solid ${progMode==="prog35"?"#2ecc71":$.btnb}`,borderRadius:6,color:progMode==="prog35"?"#2ecc71":$.t,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:600}}>{progMode==="prog35"?"Prog 3.5":"Default"}</button>
-<span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:220,top:"calc(100% + 6px)",bottom:"auto",right:0,left:"auto",transform:"none"}}>Progression mode. Default = ZenGM source code aging curves. Prog 3.5 = community progression code from <a href="https://discord.com/channels/290013534023057409/1455882262313828443/" target="_blank" style={{color:"#e63946"}}>BBGM Discord</a>. Affects all projections.</span>
+<select value={progMode} onChange={e=>setProgMode(e.target.value)} style={{background:progMode!=="default"?"rgba(46,204,113,0.15)":$.btn,border:`1px solid ${progMode!=="default"?"#2ecc71":$.btnb}`,borderRadius:6,color:progMode!=="default"?"#2ecc71":$.t,padding:"5px 8px",fontSize:10,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:600,appearance:"auto"}}>
+<option value="default">Default</option>
+<option value="pc4r">Prog 4.0 Real</option>
+<option value="pc4f">Prog 4.0 Fictional</option>
+</select>
+<span className="tip-pop" style={{background:dark?"#1a1e2e":"#fff",color:dark?"#ccc":"#333",border:`1px solid ${$.cb}`,width:220,top:"calc(100% + 6px)",bottom:"auto",right:0,left:"auto",transform:"none"}}>Progression mode. Default = ZenGM source code aging curves. Prog 4.0 = community progression code from <a href="https://discord.com/channels/290013534023057409/1455882262313828443/" target="_blank" style={{color:"#e63946"}}>BBGM Discord</a>. Real = no rookie speed/height changes. Fictional = full ProgCode. Affects all projections.</span>
 </div>
 <button onClick={()=>setTSel(false)} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>Switch Team</button><button onClick={()=>{setData(null);setTSel(false);}} style={{background:$.btn,border:`1px solid ${$.btnb}`,borderRadius:6,color:$.btnt,padding:"5px 8px",fontSize:11,cursor:"pointer"}}>New File</button></div></div>
 
